@@ -215,7 +215,7 @@ Every genre includes a **fatigue word list** (e.g., "delve", "tapestry", "testam
 
 ### 33-Dimension Audit + De-AI-ification
 
-The Continuity Auditor agent checks every draft across 33 dimensions: character memory, resource continuity, hook payoff, outline adherence, narrative pacing, emotional arcs, and more. Built-in AI-tell detection automatically catches "LLM voice" — overused words, monotonous sentence patterns, excessive summarization. Failed audits trigger an automatic revision loop.
+The Continuity Auditor agent checks every draft across 33 dimensions: character memory, resource continuity, hook payoff, outline adherence, narrative pacing, emotional arcs, and more. Built-in AI-tell detection automatically catches "LLM voice" — overused words, monotonous sentence patterns, excessive summarization. The default long-form write cycle now runs at most one automatic revision pass; unresolved critical findings are kept in the result for human review or later commands.
 
 De-AI-ification rules are baked into the Writer agent's prompts: fatigue word lists, banned patterns, style fingerprint injection — reducing AI traces at the source. `revise --mode anti-detect` runs dedicated anti-detection rewriting on existing chapters.
 
@@ -241,7 +241,7 @@ inkos plan chapter my-book --context "Pull attention back to the mentor conflict
 inkos compose chapter my-book
 ```
 
-This generates `story/runtime/chapter-XXXX.intent.md`, `context.json`, `rule-stack.yaml`, and `trace.json`. `intent.md` is the human-readable contract; the others are execution/debug artifacts. `plan` / `compose` only compile local documents and state, so they can run before you finish API key setup.
+This generates `story/runtime/chapter-XXXX.intent.md`, `context.json`, `rule-stack.yaml`, and `trace.json`. `intent.md` is the human-readable contract; the others are execution/debug artifacts. `plan` calls the LLM to produce the chapter intent; `compose` only compiles local documents and state, so it can run before you finish API key setup.
 
 ### Length Governance
 
@@ -295,15 +295,15 @@ Each chapter is produced by multiple agents in sequence, with zero human interve
 | **Radar** | Scans platform trends and reader preferences to inform story direction (pluggable, skippable) |
 | **Planner** | Reads author intent + current focus + memory retrieval results, produces chapter intent (must-keep / must-avoid) |
 | **Composer** | Selects relevant context from all truth files by relevance, compiles rule stack and runtime artifacts |
-| **Architect** | Plans chapter structure: outline, scene beats, pacing targets |
+| **Architect** | Generates foundation files during book creation, import, or spinoff setup: story frame, rules, characters, and long-horizon control files |
 | **Writer** | Produces prose from the composed context (length-governed, dialogue-driven) |
 | **Observer** | Over-extracts 9 categories of facts from the chapter text (characters, locations, resources, relationships, emotions, information, hooks, time, physical state) |
 | **Reflector** | Outputs a JSON delta (not full markdown); code-layer applies Zod schema validation then immutable write |
-| **Normalizer** | Single-pass compress/expand to bring chapter length into the target band |
+| **Normalizer** | Single-pass compress/expand only when the chapter clearly leaves the hard length range |
 | **Continuity Auditor** | Validates the draft against 7 canonical truth files, 33-dimension check |
-| **Reviser** | Fixes issues found by the auditor — auto-fixes critical problems, flags others for human review |
+| **Reviser** | Fixes critical issues found by the auditor; the default write cycle runs at most one automatic revision pass and flags the rest for human review |
 
-If the audit fails, the pipeline automatically enters a revise → re-audit loop until all critical issues are resolved.
+If the audit fails, the default pipeline runs one revise → re-audit pass. Remaining issues are preserved in the result and state for human review or later commands.
 
 ### Canonical Truth Files
 
@@ -426,7 +426,7 @@ inkos agent "Create a progression fantasy about a mage who can only use one spel
 | `inkos studio` | Start web workbench (`-p` for port, default 4567) |
 | `inkos up / down` | Start/stop daemon (`-q` quiet mode, auto-writes `inkos.log`) |
 
-`[id]` is auto-detected when the project has only one book. All commands support `--json` for structured output. `draft` / `write next` / `plan chapter` / `compose chapter` accept `--context` for steering, and `--words` overrides the target chapter size. `book create` supports `--brief <file>` to pass a creative brief — the Architect builds from your ideas instead of generating from scratch. `plan chapter` / `compose chapter` do not require a live LLM, so you can inspect governed inputs before finishing API setup.
+`[id]` is auto-detected when the project has only one book. All commands support `--json` for structured output. `draft` / `write next` / `plan chapter` / `compose chapter` accept `--context` for steering, and `--words` overrides the target chapter size. `book create` supports `--brief <file>` to pass a creative brief — the Architect builds from your ideas instead of generating from scratch. `plan chapter` calls the LLM to create chapter intent; `compose chapter` does not require a live LLM, so you can inspect governed inputs before finishing API setup.
 
 ## Roadmap
 
