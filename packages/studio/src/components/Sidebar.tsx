@@ -175,6 +175,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
   );
 
   const openSession = (bookId: string, sessionId: string) => {
+    setInput("");
     activateSession(sessionId);
     nav.toBook(bookId);
     void loadSessionDetail(sessionId);
@@ -184,11 +185,13 @@ export function Sidebar({ nav, activePage, sse, t }: {
     // 前端创建草稿会话：对话区立即变空，但 session 文件不落盘；
     // 发第一条消息时 sendMessage 会调 POST /sessions 真正创建。
     setExpandedBooks((prev) => new Set(prev).add(bookId));
+    setInput("");
     createDraftSession(bookId);
     nav.toBook(bookId);
   };
 
   const openProjectChatSession = (sessionId: string) => {
+    setInput("");
     activateSession(sessionId);
     setProjectChatSessionId(sessionId);
     nav.toChat();
@@ -199,7 +202,13 @@ export function Sidebar({ nav, activePage, sse, t }: {
     setProjectChatExpanded(true);
     const sessionId = createDraftSession(null);
     setProjectChatSessionId(sessionId);
+    setInput("");
     nav.toChat();
+  };
+
+  const handleOpenBookCreate = () => {
+    setInput("");
+    nav.toBookCreate();
   };
 
   const launchProjectMode = (kind: "short" | "play") => {
@@ -258,7 +267,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
           <div className="mb-4 space-y-1">
             <button
               type="button"
-              onClick={nav.toBookCreate}
+              onClick={handleOpenBookCreate}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-all ${
                 activePage === "book-create"
                   ? "border border-border bg-secondary text-foreground font-medium shadow-sm"
