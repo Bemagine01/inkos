@@ -164,7 +164,7 @@ ${commonOutputRules(false)}`;
 - 不要调用 writer、auditor、reviser 或 exporter；当前还没有可写章节。
 - 不要生成短篇，不要生成封面，不要启动互动世界。
 - 用户信息不够时不要硬建书；只问一个最关键的问题。
-- 用户已经确认要创建，且关键信息足够时，调用 sub_agent(agent="architect")。
+- 用户已经点击确认创建，本轮的 instruction 就是确认后的完整方案。你这一轮唯一要做的就是立即调用 sub_agent(agent="architect") 创建书籍，严禁先输出正文、大纲、方案复述或解释性文字——不调用工具就算失败。
 
 ${commonOutputRules(true)}`
     : `You are the InkOS book creation assistant. This surface only creates long-form / serialized books.
@@ -192,7 +192,7 @@ Turn the user's idea into a creatable long-form book plan, then call sub_agent w
 - Do not call writer, auditor, reviser, or exporter; there are no chapters yet.
 - Do not generate short fiction, generate covers, or start interactive worlds.
 - If key information is missing, ask one key question.
-- When the user has confirmed creation and key information is enough, call sub_agent(agent="architect").
+- The user has clicked confirm; this turn's instruction is the confirmed, complete plan. Your ONLY action this turn is to call sub_agent(agent="architect") immediately to create the book. Do NOT write any prose, outline, plan restatement, or explanation first — not calling the tool counts as a failure.
 
 ${commonOutputRules(false)}`;
 }
@@ -208,7 +208,7 @@ function buildShortPrompt(isZh: boolean, confirmedIntent?: "short_run" | "genera
 
 ## 执行
 
-- 直接调用 short_fiction_run。
+- 你这一轮唯一要做的就是立即调用 short_fiction_run 工具。严禁先输出正文、故事方案或解释性文字——不调用工具就算失败。
 - 不要创建长篇 books/ 项目，不要启动互动世界。
 - 封面图失败时，说明正文、简介、卖点和封面提示词是否已完成；原因通常是封面服务配置或上游暂时不可用，建议重试或切换封面服务/模型。不要推荐外部绘图工具。
 
@@ -221,7 +221,7 @@ ${commonOutputRules(true)}`
 
 ## Execute
 
-- Call short_fiction_run directly.
+- Your ONLY action this turn is to call the short_fiction_run tool immediately. Do NOT write the draft, outline, or any explanation first — not calling the tool counts as a failure.
 - Do not create long-form books under books/ and do not start interactive worlds.
 - If cover image generation fails, say whether the draft, synopsis, selling points, and cover prompt were completed; suggest retrying or switching the Studio cover provider/model. Do not recommend external image tools.
 
@@ -238,7 +238,7 @@ ${commonOutputRules(false)}`;
 
 ## 执行
 
-- 直接调用 generate_cover。
+- 你这一轮唯一要做的就是立即调用 generate_cover 工具，不要先输出解释性文字。
 - 不要重跑正文，不要创建长篇，不要启动互动世界。
 
 ${commonOutputRules(true)}`
@@ -250,7 +250,7 @@ ${commonOutputRules(true)}`
 
 ## Execute
 
-- Call generate_cover directly.
+- Your ONLY action this turn is to call the generate_cover tool immediately; do not write explanation first.
 - Do not call short_fiction_run, rewrite prose, create long-form books, or start interactive worlds.
 
 ${commonOutputRules(false)}`;
@@ -310,7 +310,7 @@ function buildPlayPrompt(isZh: boolean, confirmedStart: boolean): string {
 
 ## 执行
 
-- 直接调用 play_start。
+- 你这一轮唯一要做的就是立即调用 play_start 工具。严禁先输出任何正文、场景描写、开场叙述或解释性文字——不调用工具就算失败。把开场场景写进 play_start 的 initialScene 参数里，不要直接讲给用户。
 - 不要创建长篇书籍，不要生成短篇成品。
 
 ${commonOutputRules(true)}`
@@ -322,7 +322,7 @@ ${commonOutputRules(true)}`
 
 ## Execute
 
-- Call play_start directly.
+- Your ONLY action this turn is to call the play_start tool immediately. Do NOT write any prose, scene description, opening narration, or explanation first — not calling the tool counts as a failure. Put the opening scene inside play_start's initialScene parameter; do not narrate it directly to the user.
 - Do not create long-form books or generate standalone short fiction.
 
 ${commonOutputRules(false)}`;
