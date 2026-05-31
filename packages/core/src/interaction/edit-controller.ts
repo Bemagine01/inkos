@@ -1,5 +1,5 @@
-import { readdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { access, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { basename, dirname, join, relative } from "node:path";
 import type { ChapterMeta } from "../models/chapter.js";
 import { classifyTruthAuthority, normalizeTruthFileName, type TruthAuthority } from "./truth-authority.js";
 
@@ -142,14 +142,63 @@ async function collectEditableFiles(dir: string): Promise<ReadonlyArray<string>>
   return files.flat();
 }
 
+interface PlannedFileRename {
+  readonly fromAbs: string;
+  readonly toAbs: string;
+  readonly from: string;
+  readonly to: string;
+}
+
+// newValue is LLM-supplied (system boundary). A name embedded into a filename must stay a single
+// path component — reject path separators so a rename target can never escape its directory.
+function assertEntityRenameTargetIsSafe(newValue: string): void {
+  if (/[/\\]/.test(newValue)) {
+    throw new Error(`Invalid rename target "${newValue}": entity names cannot contain path separators.`);
+  }
+}
+
+// Entity files are addressed by path elsewhere (e.g. roles/主要角色/<name>.md). When the content pass
+// rewrites those path references from oldValue to newValue, the files themselves must be renamed too,
+// or the references dangle. Plan the disk renames up front (before any write) so a name collision
+// aborts the whole transaction cleanly instead of leaving content half-rewritten.
+async function planEntityFileRenames(
+  root: string,
+  files: ReadonlyArray<string>,
+  oldValue: string,
+  newValue: string,
+): Promise<ReadonlyArray<PlannedFileRename>> {
+  const planned: PlannedFileRename[] = [];
+  for (const filePath of files) {
+    const base = basename(filePath);
+    if (!base.includes(oldValue)) {
+      continue;
+    }
+    const nextBase = base.split(oldValue).join(newValue);
+    if (nextBase === base) {
+      continue;
+    }
+    const toAbs = join(dirname(filePath), nextBase);
+    const targetExists = await access(toAbs).then(() => true).catch(() => false);
+    if (targetExists) {
+      throw new Error(
+        `Cannot rename "${relative(root, filePath)}" to "${nextBase}": a file with that name already exists.`,
+      );
+    }
+    planned.push({ fromAbs: filePath, toAbs, from: relative(root, filePath), to: relative(root, toAbs) });
+  }
+  return planned;
+}
+
 async function executeEntityRename(
   deps: EditExecutionDeps,
   request: Extract<EditRequest, { kind: "entity-rename" }>,
 ): Promise<ExecutedEditTransaction> {
   const root = deps.bookDir(request.bookId);
+  assertEntityRenameTargetIsSafe(request.newValue);
   const files = await collectEditableFiles(root);
-  const touchedFiles: string[] = [];
+  const plannedRenames = await planEntityFileRenames(root, files, request.oldValue, request.newValue);
   const matcher = new RegExp(escapeRegExp(request.oldValue), "g");
+  const touched = new Set<string>();
 
   for (const filePath of files) {
     const content = await readFile(filePath, "utf-8");
@@ -158,19 +207,29 @@ async function executeEntityRename(
       continue;
     }
     await writeFile(filePath, nextContent, "utf-8");
-    touchedFiles.push(relative(root, filePath));
+    touched.add(relative(root, filePath));
   }
 
-  if (touchedFiles.length === 0) {
+  for (const planned of plannedRenames) {
+    await rename(planned.fromAbs, planned.toAbs);
+    touched.delete(planned.from);
+    touched.add(planned.to);
+  }
+
+  if (touched.size === 0) {
     throw new Error(`No occurrences of "${request.oldValue}" were found in "${request.bookId}".`);
   }
 
+  const touchedFiles = [...touched];
+  const renameNote = plannedRenames.length > 0
+    ? ` (${plannedRenames.length} file${plannedRenames.length === 1 ? "" : "s"} renamed on disk)`
+    : "";
   return {
     transactionType: request.kind,
     bookId: request.bookId,
     touchedFiles,
     reviewRequired: false,
-    summary: `Renamed ${request.oldValue} to ${request.newValue} across ${touchedFiles.length} files.`,
+    summary: `Renamed ${request.oldValue} to ${request.newValue} across ${touchedFiles.length} files${renameNote}.`,
   };
 }
 
