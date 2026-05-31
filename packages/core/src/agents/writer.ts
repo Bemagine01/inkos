@@ -873,10 +873,22 @@ ${lengthRequirementBlock}
     readonly selectedEvidenceBlock?: string;
   }): string {
     const language = params.language ?? "zh";
-    const contextSections = renderNarrativeSelectedContext(
-      params.contextPackage.selectedContext,
-      language,
+    // The user's steering docs (author_intent = long-term direction, current_focus =
+    // short-term focus) must land as a prominent, binding block near the top — not
+    // buried among generic "evidence" entries where the model treats them as optional.
+    const DIRECTION_SOURCES = new Set(["story/author_intent.md", "story/current_focus.md"]);
+    const directionEntries = params.contextPackage.selectedContext.filter((entry) =>
+      DIRECTION_SOURCES.has(entry.source),
     );
+    const otherEntries = params.contextPackage.selectedContext.filter((entry) =>
+      !DIRECTION_SOURCES.has(entry.source),
+    );
+    const contextSections = renderNarrativeSelectedContext(otherEntries, language);
+    const userDirectionBlock = directionEntries.length > 0
+      ? (language === "en"
+          ? `## User direction (overrides model defaults — must follow)\n${renderNarrativeSelectedContext(directionEntries, language)}\n`
+          : `## 用户方向（优先于模型默认，必须遵循）\n${renderNarrativeSelectedContext(directionEntries, language)}\n`)
+      : "";
 
     const diagnosticLines = params.ruleStack.sections.diagnostic.length > 0
       ? params.ruleStack.sections.diagnostic.join(", ")
@@ -897,6 +909,7 @@ ${lengthRequirementBlock}
 
 ${chapterContextBlock}
 
+${userDirectionBlock}
 ${briefNarrative}
 
 ## Selected Context
@@ -918,6 +931,7 @@ ${lengthRequirementBlock}
 
 ${chapterContextBlock}
 
+${userDirectionBlock}
 ${briefNarrative}
 
 ## 已选上下文

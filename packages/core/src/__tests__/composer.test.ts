@@ -106,13 +106,16 @@ describe("ComposerAgent", () => {
     });
 
     const selectedSources = result.contextPackage.selectedContext.map((entry) => entry.source);
-    expect(selectedSources.slice(0, 5)).toEqual([
+    expect(selectedSources.slice(0, 6)).toEqual([
       "runtime/chapter_memo",
       "story/current_focus.md",
+      "story/author_intent.md",
       "story/current_state.md",
       "story/story_bible.md",
       "story/volume_outline.md",
     ]);
+    // The user's long-term direction must reach the writer's context, not be dropped.
+    expect(selectedSources).toContain("story/author_intent.md");
     expect(selectedSources.some((source) => source.startsWith("story/pending_hooks.md"))).toBe(true);
     expect(selectedSources).not.toContain("story/style_guide.md");
     await expect(readFile(result.contextPath, "utf-8")).resolves.toContain("current_focus.md");

@@ -116,6 +116,11 @@ async function collectSelectedContext(
       maybeContextSource(storyDir, "current_focus.md", "Current task focus for this chapter."),
       maybeContextSource(
         storyDir,
+        "author_intent.md",
+        "User's long-term authorial intent and direction — binding, overrides model defaults.",
+      ),
+      maybeContextSource(
+        storyDir,
         "audit_drift.md",
         "Carry forward audit drift guidance from the previous chapter without polluting hard state facts.",
       ),
