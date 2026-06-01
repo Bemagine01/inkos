@@ -97,6 +97,16 @@ export {
 } from "./play/play-runner.js";
 export { PlayStore, type PlayTranscriptTurn, type PlayWorld, type PlayWorldInput, type PlayRunSummary } from "./play/play-store.js";
 export {
+  buildPlayEntityImagePrompt,
+  buildPlaySceneImagePrompt,
+  readPlayImageManifest,
+  setPlayImageEntry,
+  playImageFileName,
+  generatePlayImage,
+  type PlayImageEntry,
+  type PlayImageManifest,
+} from "./play/play-image.js";
+export {
   type ChapterMemo,
   type ChapterIntent,
   type ContextSource,
