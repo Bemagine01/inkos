@@ -63,7 +63,7 @@ export function buildShortFictionOutlineUserPrompt(input: ShortFictionOutlinePro
     "## 目标规格",
     `完整短篇 ${input.chapterCount} 章，每章约 ${input.charsPerChapter} 字。`,
     "",
-    input.reference?.text ? "## 可选参考文本\n" + trimForPrompt(input.reference.text, 12000) + "\n" : "",
+    input.reference?.text ? "## 可选参考文本\n" + input.reference.text.trim() + "\n" : "",
     "## 产出要求",
     "先给一个平台感标题，再给完整故事方案。大纲要讲清楚主角为什么被压住、读者想看什么回报、主角靠什么翻盘、证据/关系/身份/规则如何递进、反派为什么会反扑、结尾如何落地。",
     "章节方案必须逐章写清：章节标题方向、当章发生的关键场面、角色动作、压力升级或回报、章尾继续读的理由。",
@@ -91,7 +91,7 @@ export function buildShortFictionOutlineReviewUserPrompt(input: ShortFictionOutl
     "## 商业方向",
     input.direction,
     "",
-    input.reference?.text ? "## 可选参考文本\n" + trimForPrompt(input.reference.text, 8000) + "\n" : "",
+    input.reference?.text ? "## 可选参考文本\n" + input.reference.text.trim() + "\n" : "",
     "## 待审故事方案",
     input.outline.rawContent,
     "",
@@ -236,10 +236,10 @@ export function buildShortFictionPackageUserPrompt(input: ShortFictionPackagePro
     input.direction,
     "",
     "## 故事方案",
-    trimForPrompt(input.outlineMarkdown, 6000),
+    input.outlineMarkdown.trim(),
     "",
     "## 最终正文",
-    trimForPrompt(input.draftMarkdown, 16000),
+    input.draftMarkdown.trim(),
     "",
     "## 输出格式",
     "=== SHORT_FICTION_PACKAGE_TITLE ===",
@@ -266,10 +266,4 @@ function buildShortFictionCraftPrompt(): string {
     "- 日常细节要变成饵：细节承担证据、情绪、人物差异或后续反转功能。",
     "- 移动端优先：段落短，信息密，少写空泛抒情和装饰性废话。",
   ].join("\n");
-}
-
-function trimForPrompt(text: string, maxChars: number): string {
-  const trimmed = text.trim();
-  if (trimmed.length <= maxChars) return trimmed;
-  return `${trimmed.slice(0, maxChars)}\n\n……（已截断）`;
 }
