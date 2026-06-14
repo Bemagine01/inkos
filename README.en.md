@@ -28,6 +28,8 @@
 
 InkOS is a local AI creation system for long-form novels, standalone short fiction, fan fiction, spinoffs, style imitation, continuation, and interactive worlds. Studio Chat, CLI, and TUI share the same action surface, so you can discuss ideas, confirm heavy actions, generate work, preview artifacts, and edit persistent project files from one place.
 
+> 💡 **Give your writing agent a professional data layer first** — writing fiction isn't just about the model; what's usually missing is the source material. Pair InkOS with [**火花数据API (huohuaapi)**](https://huohuaapi.com/): a pay-per-call novel / web-fiction creation data API. Before the agent writes, it can pull sourced material — novel text, chapter structure, character profiles, writing style, and craft methods — instead of relying on prompts alone to fake a "plot outline".
+
 ## v1.5.0 Major Update
 
 v1.5.0 is less about one isolated feature and more about moving InkOS from a chapter pipeline into a conversational, confirmable, context-aware creation system:
