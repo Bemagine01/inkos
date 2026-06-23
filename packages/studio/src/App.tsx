@@ -19,6 +19,7 @@ import { ImportManager } from "./pages/ImportManager";
 import { RadarView } from "./pages/RadarView";
 import { DoctorView } from "./pages/DoctorView";
 import { StoryPlayer } from "./pages/StoryPlayer";
+import { StoryGraphTree } from "./pages/StoryGraphTree";
 import { LanguageSelector } from "./pages/LanguageSelector";
 import { BookSidebar, BookSidebarToggle } from "./components/chat/BookSidebar";
 import { useSSE } from "./hooks/use-sse";
@@ -95,6 +96,7 @@ export function App() {
     toRadar: () => setRoute({ page: "radar" }),
     toDoctor: () => setRoute({ page: "doctor" }),
     toPlay: (projectId: string) => setRoute({ page: "play", projectId }),
+    toFilm: (projectId: string) => setRoute({ page: "film", projectId }),
   };
 
   const activeBookId = deriveActiveBookId(route);
@@ -318,6 +320,11 @@ export function App() {
           {route.page === "play" && (
             <div className="max-w-4xl mx-auto px-6 py-12 md:px-12 lg:py-16 fade-in">
               <StoryPlayer projectId={route.projectId} nav={nav} theme={theme} t={t} />
+            </div>
+          )}
+          {route.page === "film" && (
+            <div className="max-w-4xl mx-auto px-6 py-12 md:px-12 lg:py-16 fade-in">
+              <StoryGraphTree projectId={route.projectId} nav={nav} theme={theme} t={t} />
             </div>
           )}
         </main>
