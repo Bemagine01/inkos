@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useApi, fetchJson } from "../hooks/use-api";
+import { useApi, fetchJson, buildApiUrl } from "../hooks/use-api";
 import { useColors } from "../hooks/use-colors";
 import type { Theme } from "../hooks/use-theme";
 import type { TFunction } from "../hooks/use-i18n";
@@ -25,10 +25,24 @@ export function StoryGraphTree({
   const { data: graph, loading, error, refetch } = useApi<StoryGraph>(`/projects/${projectId}/story-graph`);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
 
   if (loading) return <div className={c.muted}>{t("common.loading")}</div>;
   if (error) return <div className="text-red-400">{t("common.error")}: {error}</div>;
   if (!graph) return null;
+
+  const genImage = async (nodeId: string) => {
+    setGeneratingId(nodeId);
+    setSaveError(null);
+    try {
+      await fetchJson(`/projects/${projectId}/nodes/${nodeId}/image`, { method: "POST" });
+      await refetch();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGeneratingId(null);
+    }
+  };
 
   const saveNode = async (node: StoryNode) => {
     setSavingId(node.id);
@@ -85,6 +99,8 @@ export function StoryGraphTree({
             node={node}
             saving={savingId === node.id}
             onSave={saveNode}
+            generating={generatingId === node.id}
+            onGenerateImage={genImage}
             colors={c}
           />
         ))}
@@ -97,11 +113,15 @@ function NodeEditor({
   node,
   saving,
   onSave,
+  generating,
+  onGenerateImage,
   colors,
 }: {
   node: StoryNode;
   saving: boolean;
   onSave: (n: StoryNode) => void;
+  generating: boolean;
+  onGenerateImage: (nodeId: string) => void;
   colors: ReturnType<typeof useColors>;
 }) {
   const [scene, setScene] = useState(node.sceneDesc);
@@ -113,6 +133,15 @@ function NodeEditor({
         <span className="px-1.5 py-0.5 rounded bg-slate-200 text-xs">{node.type}</span>
         <span>{node.title || node.id}</span>
       </div>
+      {node.imageSlot?.assetRef && (
+        <img
+          data-testid={`node-image-${node.id}`}
+          src={buildApiUrl('/project/files/' + node.imageSlot.assetRef.split('/').map(encodeURIComponent).join('/')) ?? undefined}
+          alt=""
+          className="w-32 rounded mb-2"
+          loading="lazy"
+        />
+      )}
       <textarea
         data-testid={`film-scene-${node.id}`}
         className="mt-2 w-full text-sm border rounded p-2"
@@ -129,14 +158,24 @@ function NodeEditor({
           ))}
         </div>
       )}
-      <button
-        data-testid={`film-save-${node.id}`}
-        disabled={!dirty || saving}
-        onClick={() => onSave({ ...node, sceneDesc: scene })}
-        className="mt-2 px-3 py-1 text-xs rounded bg-slate-700 text-white disabled:opacity-40"
-      >
-        {saving ? "保存中…" : "保存"}
-      </button>
+      <div className="flex items-center gap-2 mt-2">
+        <button
+          data-testid={`film-save-${node.id}`}
+          disabled={!dirty || saving}
+          onClick={() => onSave({ ...node, sceneDesc: scene })}
+          className="px-3 py-1 text-xs rounded bg-slate-700 text-white disabled:opacity-40"
+        >
+          {saving ? "保存中…" : "保存"}
+        </button>
+        <button
+          data-testid={`gen-image-${node.id}`}
+          disabled={generating}
+          onClick={() => onGenerateImage(node.id)}
+          className="px-3 py-1 text-xs rounded bg-violet-600 text-white disabled:opacity-40"
+        >
+          {generating ? "生成中…" : "生成配图"}
+        </button>
+      </div>
     </div>
   );
 }

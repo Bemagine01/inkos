@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
-import { useApi } from "../hooks/use-api";
+import { useApi, buildApiUrl } from "../hooks/use-api";
 import { useColors } from "../hooks/use-colors";
 import type { Theme } from "../hooks/use-theme";
 import type { TFunction } from "../hooks/use-i18n";
@@ -76,6 +76,16 @@ export function StoryPlayer({
     <div className="space-y-6 relative" data-testid="player-screen">
       <button onClick={nav.toDashboard} className={c.link} data-testid="player-back">← {t("bread.books")}</button>
       <h2 className="text-xl font-medium" data-testid="player-node-title">{node.title}</h2>
+
+      {node.imageSlot?.assetRef && (
+        <img
+          data-testid="player-image"
+          src={buildApiUrl('/project/files/' + node.imageSlot.assetRef.split('/').map(encodeURIComponent).join('/')) ?? undefined}
+          alt={node.title}
+          className="w-full rounded-lg mb-4"
+          loading="lazy"
+        />
+      )}
 
       {node.sceneDesc && <p className={`italic ${c.muted}`}>{node.sceneDesc}</p>}
 
