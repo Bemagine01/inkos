@@ -66,7 +66,7 @@ function routeToHash(route: HashRoute): string {
 
 export { parseHash, routeToHash }; // for testing
 
-const HASH_PAGES = new Set(["dashboard", "chat", "book", "book-settings", "book-create", "services", "project-settings", "service-detail", "import"]);
+const HASH_PAGES = new Set(["dashboard", "chat", "book", "book-settings", "book-create", "services", "project-settings", "service-detail", "import", "play"]);
 
 export function useHashRoute() {
   const [route, setRouteState] = useState<HashRoute>(() => parseHash(window.location.hash));

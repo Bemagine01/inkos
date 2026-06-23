@@ -10,11 +10,6 @@ export default defineConfig({
       "@": resolve(__dirname, "src"),
     },
   },
-  build: {
-    rollupOptions: {
-      external: (id) => id.startsWith("node:"),
-    },
-  },
   server: {
     port: 4567,
     proxy: {

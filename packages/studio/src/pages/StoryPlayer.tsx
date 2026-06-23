@@ -3,14 +3,8 @@ import { useApi } from "../hooks/use-api";
 import { useColors } from "../hooks/use-colors";
 import type { Theme } from "../hooks/use-theme";
 import type { TFunction } from "../hooks/use-i18n";
-import {
-  visibleChoices,
-  applyEffects,
-  initVarState,
-  type StoryGraph,
-  type Choice,
-  type VarState,
-} from "@actalk/inkos-core";
+import { visibleChoices, applyEffects, initVarState, type VarState } from "@actalk/inkos-core/interactive-film/evaluator";
+import type { StoryGraph, Choice } from "@actalk/inkos-core/interactive-film/graph-schema";
 
 interface Nav { toDashboard: () => void }
 
