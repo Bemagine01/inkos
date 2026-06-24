@@ -17,7 +17,7 @@ import { useColors } from "../hooks/use-colors";
 import type { Theme } from "../hooks/use-theme";
 import type { TFunction } from "../hooks/use-i18n";
 import { layoutStoryGraph } from "../lib/story-flow-layout";
-import { moveNodeDelta, addNodeDelta, genNodeId } from "../lib/story-editor-deltas";
+import { moveNodeDelta, addNodeDelta, genNodeId, addChoiceDelta, removeChoiceDelta, removeNodeDelta, genChoiceId } from "../lib/story-editor-deltas";
 import type { StoryGraph } from "@actalk/inkos-core/interactive-film/graph-schema";
 
 interface Nav {
@@ -105,6 +105,27 @@ export default function FlowView({
     await post(moveNodeDelta(orig, Math.round(node.position.x), Math.round(node.position.y)));
   };
 
+  const onConnect = async (c: { source: string | null; target: string | null }) => {
+    if (!editing || !graph || !c.source || !c.target) return;
+    const src = graph.nodes.find((g) => g.id === c.source);
+    if (!src) return;
+    await post(addChoiceDelta(src, { id: genChoiceId(), text: "新选项", targetNodeId: c.target }));
+  };
+
+  const onNodesDelete = async (deleted: Array<{ id: string }>) => {
+    if (!editing) return;
+    for (const d of deleted) await post(removeNodeDelta(d.id));
+  };
+
+  const onEdgesDelete = async (deleted: Array<{ id: string }>) => {
+    if (!editing || !graph) return;
+    for (const e of deleted) {
+      const [source, choiceId] = e.id.split("->"); // layout edge id format: ${node.id}->${choice.id}
+      const src = graph.nodes.find((g) => g.id === source);
+      if (src && choiceId) await post(removeChoiceDelta(src, choiceId));
+    }
+  };
+
   const onAddNode = async () => {
     await post(
       addNodeDelta({
@@ -169,9 +190,13 @@ export default function FlowView({
           fitView
           colorMode={theme === "dark" ? "dark" : "light"}
           nodesDraggable={editing}
-          nodesConnectable={false}
+          nodesConnectable={editing}
           elementsSelectable={editing}
           onNodeDragStop={onNodeDragStop}
+          onConnect={onConnect}
+          onNodesDelete={onNodesDelete}
+          onEdgesDelete={onEdgesDelete}
+          deleteKeyCode={editing ? ["Delete", "Backspace"] : null}
         >
           <Background />
           <Controls />
