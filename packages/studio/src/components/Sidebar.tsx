@@ -84,6 +84,7 @@ interface Nav {
   toImport: (tab?: "chapters" | "canon" | "fanfic" | "spinoff" | "imitation") => void;
   toRadar: () => void;
   toDoctor: () => void;
+  toFilmStudio: (id: string) => void;
 }
 
 export function Sidebar({ nav, activePage, sse, t }: {
@@ -93,6 +94,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
   t: TFunction;
 }) {
   const { data, refetch: refetchBooks, mutate: mutateBooks } = useApi<{ books: ReadonlyArray<BookSummary> }>("/books");
+  const { data: filmsData, refetch: refetchFilms } = useApi<{ films: ReadonlyArray<{ projectId: string; title: string }> }>("/interactive-films");
   const { data: daemon, refetch: refetchDaemon } = useApi<{ running: boolean }>("/daemon");
   const sessions = useChatStore((s) => s.sessions);
   const sessionIdsByBook = useChatStore((s) => s.sessionIdsByBook);
@@ -111,8 +113,10 @@ export function Sidebar({ nav, activePage, sse, t }: {
   const [expandedBooks, setExpandedBooks] = useState<Set<string>>(new Set());
   const [projectChatExpanded, setProjectChatExpanded] = useState(true);
   const [myBooksExpanded, setMyBooksExpanded] = useState(true);
+  const [filmsExpanded, setFilmsExpanded] = useState(true);
 
   const books = data?.books ?? [];
+  const films = filmsData?.films ?? [];
   const projectChatKey = "__null__";
   const projectChatSessions = useMemo(
     () =>
@@ -160,6 +164,10 @@ export function Sidebar({ nav, activePage, sse, t }: {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookDataVersion, loadSessionList, projectChatExpanded]);
+
+  useEffect(() => {
+    void refetchFilms();
+  }, [bookDataVersion, refetchFilms]);
 
   useEffect(() => {
     if (activePage === "chat") {
@@ -423,6 +431,32 @@ export function Sidebar({ nav, activePage, sse, t }: {
               </div>
             )}
           </div>
+          </Collapse>
+        </div>
+
+        {/* 互动影游 Section */}
+        <div data-testid="film-projects-section">
+          <SectionHeader label="互动影游" expanded={filmsExpanded} onToggle={() => setFilmsExpanded((v) => !v)} />
+          <Collapse open={filmsExpanded}>
+            <div className="space-y-0.5 pt-1">
+              {films.map((film) => (
+                <button
+                  key={film.projectId}
+                  type="button"
+                  data-testid={`film-project-${film.projectId}`}
+                  onClick={() => nav.toFilmStudio(film.projectId)}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left hover:bg-secondary/30 transition-colors"
+                >
+                  <Film size={14} className="shrink-0 text-muted-foreground" />
+                  <span className="truncate text-[15px] text-foreground">{film.title}</span>
+                </button>
+              ))}
+              {films.length === 0 && (
+                <div className="px-3 py-6 text-xs text-muted-foreground/50 italic text-center">
+                  还没有互动影游项目
+                </div>
+              )}
+            </div>
           </Collapse>
         </div>
 
