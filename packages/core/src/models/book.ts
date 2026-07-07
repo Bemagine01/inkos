@@ -71,3 +71,17 @@ export const BookConfigSchema = z.object({
 });
 
 export type BookConfig = z.infer<typeof BookConfigSchema>;
+
+export type ChapterReviewMode = "auto" | "manual";
+
+/**
+ * Resolve the effective chapter review mode for a book:
+ * book-level `writing.reviewMode` (book.json) overrides the project-level
+ * `writing.reviewMode` (inkos.json); both unset falls back to "auto".
+ */
+export function resolveChapterReviewMode(
+  book: Pick<BookConfig, "writing">,
+  projectWriting?: { readonly reviewMode?: ChapterReviewMode },
+): ChapterReviewMode {
+  return book.writing?.reviewMode ?? projectWriting?.reviewMode ?? "auto";
+}
