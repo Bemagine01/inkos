@@ -231,6 +231,24 @@ describe("agent deterministic writing tools", () => {
     });
   });
 
+  it("carries skills activated by the agent into the confirmed action", async () => {
+    const activatedSkillIds = ["writer-distillation"];
+    const tool = createProposeActionTool("zh", {
+      requestedSkillIds: () => activatedSkillIds,
+    });
+
+    const result = await tool.execute("proposal-with-skill", {
+      action: "short_run",
+      instruction: "把这份素材蒸馏成一篇商业短篇",
+    });
+
+    expect(result.details).toMatchObject({
+      kind: "proposed_action",
+      action: "short_run",
+      requestedSkills: ["writer-distillation"],
+    });
+  });
+
   it("carries structured execution payloads in proposed actions", async () => {
     const tool = createProposeActionTool("zh");
 

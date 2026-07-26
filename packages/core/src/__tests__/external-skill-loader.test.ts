@@ -6,6 +6,7 @@ import {
   createSkillRegistry,
   loadConfiguredCapabilitySkills,
   loadExternalCapabilitySkills,
+  parseCapabilitySkillDocument,
 } from "../skills/index.js";
 
 describe("external skill loader", () => {
@@ -30,11 +31,6 @@ describe("external skill loader", () => {
         "name: Detective Play",
         "description: Detective evidence and suspect-board play.",
         "whenToUse: Use for open-world detective play and evidence ledgers.",
-        "triggers:",
-        "  - 侦探",
-        "  - evidence",
-        "sessionKinds:",
-        "  - play",
         "promptPacks:",
         "  - detective.play",
         "toolHints:",
@@ -69,6 +65,96 @@ describe("external skill loader", () => {
     expect(result.skills[0].contextNeeds.map((need) => need.id)).toContain("evidence-ledger");
   });
 
+  it("loads an AgentSkills/OpenClaw manifest without InkOS-only fields", async () => {
+    const skillDir = join(root, "writer-distillation");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, "SKILL.md"),
+      [
+        "---",
+        "name: writer-distillation",
+        "description: Distill a writer's repeatable craft and use it when the user asks for style analysis or imitation.",
+        "version: 1.2.0",
+        'metadata: { "openclaw": { "emoji": "✍️" } }',
+        "---",
+        "",
+        "# Writer Distillation",
+        "",
+        "Read the supplied samples, separate transferable craft from surface wording, and produce an editable writing guide.",
+      ].join("\r\n"),
+      "utf-8",
+    );
+
+    const result = await loadExternalCapabilitySkills({ externalDirs: [skillDir] });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.skills).toEqual([
+      expect.objectContaining({
+        id: "writer-distillation",
+        name: "writer-distillation",
+        description: expect.stringContaining("Distill a writer"),
+        whenToUse: expect.stringContaining("style analysis or imitation"),
+        body: expect.stringContaining("transferable craft"),
+        baseDir: skillDir,
+        source: "external",
+      }),
+    ]);
+  });
+
+  it("derives a stable id from a standard skill name when no id is present", () => {
+    const skill = parseCapabilitySkillDocument(
+      [
+        "---",
+        "name: Writer Distillation",
+        "description: Use for writer-style distillation.",
+        "---",
+        "Distill craft.",
+      ].join("\n"),
+      { skillPath: join(root, "SKILL.md") },
+    );
+
+    expect(skill.id).toBe("writer-distillation");
+  });
+
+  it("prefixes ids derived from names that begin with a number", () => {
+    const skill = parseCapabilitySkillDocument(
+      [
+        "---",
+        "name: 3D Scene Writer",
+        "description: Use for spatial scene writing.",
+        "---",
+        "Keep spatial continuity visible.",
+      ].join("\n"),
+      { skillPath: join(root, "SKILL.md") },
+    );
+
+    expect(skill.id).toBe("skill-3d-scene-writer");
+  });
+
+  it("rejects discovery metadata larger than the Agent Skills limits", () => {
+    expect(() => parseCapabilitySkillDocument(
+      [
+        "---",
+        `name: ${"n".repeat(65)}`,
+        "description: Small description.",
+        "---",
+        "Body.",
+      ].join("\n"),
+      { skillPath: join(root, "SKILL.md") },
+    )).toThrow(/name.*64/i);
+
+    expect(() => parseCapabilitySkillDocument(
+      [
+        "---",
+        "name: oversized-description",
+        `description: ${"d".repeat(1025)}`,
+        "---",
+        "Body.",
+      ].join("\n"),
+      { skillPath: join(root, "SKILL.md") },
+    )).toThrow(/description.*1024/i);
+  });
+
   it("registers loaded external skills with the normal registry", async () => {
     const skillDir = join(root, "romance-play");
     await mkdir(skillDir, { recursive: true });
@@ -80,8 +166,6 @@ describe("external skill loader", () => {
         "name: Romance Play",
         "description: Romance interaction skill.",
         "whenToUse: Use for romance play.",
-        "triggers: [恋爱]",
-        "sessionKinds: [play]",
         "contextNeeds:",
         "  - id: relationship-tone",
         "    purpose: Preserve relationship tone.",
@@ -121,8 +205,6 @@ describe("external skill loader", () => {
         "name: Detective Play",
         "description: Detective evidence play.",
         "whenToUse: Use for detective play.",
-        "triggers: [侦探]",
-        "sessionKinds: [play]",
         "---",
         "Preserve evidence chains.",
       ].join("\n"),
@@ -139,6 +221,31 @@ describe("external skill loader", () => {
     expect(loaded.skills.map((skill) => skill.id)).toContain("detective-play");
   });
 
+  it("discovers AgentSkills/OpenClaw project roots and one grouping level", async () => {
+    const groupedSkillDir = join(root, "project", "skills", "writing", "writer-distillation");
+    await mkdir(groupedSkillDir, { recursive: true });
+    await writeFile(
+      join(groupedSkillDir, "SKILL.md"),
+      [
+        "---",
+        "name: writer-distillation",
+        "description: Distill writer craft.",
+        "---",
+        "Preserve transferable craft, not source wording.",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const loaded = await loadConfiguredCapabilitySkills({
+      projectRoot: join(root, "project"),
+      env: {},
+      userRoot: join(root, "home", ".inkos"),
+    });
+
+    expect(loaded.diagnostics).toEqual([]);
+    expect(loaded.skills.map((skill) => skill.id)).toContain("writer-distillation");
+  });
+
   it("loads external skills from INKOS_SKILL_DIRS and reports bad paths without throwing", async () => {
     const externalRoot = join(root, "external-skills");
     const skillDir = join(externalRoot, "romance-play");
@@ -151,8 +258,6 @@ describe("external skill loader", () => {
         "name: Romance Play",
         "description: Romance interaction skill.",
         "whenToUse: Use for romance play.",
-        "triggers: [恋爱]",
-        "sessionKinds: [play]",
         "---",
         "Keep emotional continuity.",
       ].join("\n"),

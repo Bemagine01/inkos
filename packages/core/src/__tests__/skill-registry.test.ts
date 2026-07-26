@@ -20,13 +20,11 @@ describe("capability skill registry", () => {
     }
   });
 
-  it("resolves forced skills even when the instruction would not auto-select them", () => {
+  it("resolves user-forced skills", () => {
     const registry = createSkillRegistry();
 
     const result = registry.resolveSkills({
       requestedSkills: ["interactive-film-authoring"],
-      sessionKind: "chat",
-      instruction: "随便聊聊这个故事标题",
     });
 
     expect(result.usedSkills.map((skill) => skill.id)).toEqual(["interactive-film-authoring"]);
@@ -39,43 +37,28 @@ describe("capability skill registry", () => {
 
     const result = registry.resolveSkills({
       requestedSkills: ["not-a-skill", "longform-writing"],
-      instruction: "继续写下一章",
     });
 
     expect(result.usedSkills.map((skill) => skill.id)).toEqual(["longform-writing"]);
     expect(result.missingSkillIds).toEqual(["not-a-skill"]);
   });
 
-  it("excludes disabled skills from automatic selection", () => {
+  it("excludes disabled skills from forced selection", () => {
     const registry = createSkillRegistry();
 
     const result = registry.resolveSkills({
       disabledSkills: ["interactive-film-authoring"],
-      instruction: "把这个小说改成互动影游，做变量旗标和多结局",
+      requestedSkills: ["interactive-film-authoring"],
     });
 
-    expect(result.autoSkillIds).not.toContain("interactive-film-authoring");
     expect(result.usedSkills.map((skill) => skill.id)).not.toContain("interactive-film-authoring");
     expect(result.disabledSkillIds).toEqual(["interactive-film-authoring"]);
   });
 
-  it("auto-selects skill candidates from session kind and natural-language instruction", () => {
+  it("does not auto-load skills without an explicit request", () => {
     const registry = createSkillRegistry();
 
-    expect(registry.resolveSkills({
-      sessionKind: "play",
-      instruction: "我走进旧图书馆，查看桌上的信",
-    }).usedSkills.map((skill) => skill.id)).toEqual(["open-world-play"]);
-
-    expect(registry.resolveSkills({
-      sessionKind: "chat",
-      instruction: "做一个互动影游，需要分支剧情、变量旗标和两个结局",
-    }).usedSkills.map((skill) => skill.id)).toEqual(["interactive-film-authoring"]);
-
-    expect(registry.resolveSkills({
-      sessionKind: "book",
-      instruction: "继续写下一章，注意伏笔一致性",
-    }).usedSkills.map((skill) => skill.id)).toEqual(["longform-writing"]);
+    expect(registry.resolveSkills({}).usedSkills.map((skill) => skill.id)).toEqual([]);
   });
 
   it("keeps built-in manifests schema-valid at module load time", () => {

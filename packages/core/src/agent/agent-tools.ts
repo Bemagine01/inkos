@@ -286,6 +286,7 @@ type ProposeActionParamsType = Static<typeof ProposeActionParams>;
 type ProposedActionTargetRoute = "import:fanfic" | "import:chapters" | "import:canon" | "import:spinoff" | "import:imitation" | "style";
 type ProposeActionToolOptions = {
   readonly sameSession?: boolean;
+  readonly requestedSkillIds?: () => ReadonlyArray<string>;
 };
 
 function proposedActionSessionKind(action: ProposeActionParamsType["action"]): "book-create" | "short" | "play" | "script" | "storyboard" | "interactive-film" | "interactive-film-authoring" | "chat" {
@@ -511,6 +512,7 @@ export function createProposeActionTool(
       }
       const actionPayload = proposedPayload.payload;
       assertExecutableProposedAction(params, actionPayload);
+      const requestedSkills = normalizeProposedSkillIds(options.requestedSkillIds?.());
       return textResult(
         [
           title,
@@ -527,11 +529,24 @@ export function createProposeActionTool(
           title,
           summary,
           instruction: params.instruction,
+          ...(requestedSkills.length > 0 ? { requestedSkills } : {}),
           ...(actionPayload ? { actionPayload } : {}),
         },
       );
     },
   };
+}
+
+function normalizeProposedSkillIds(values: ReadonlyArray<string> | undefined): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values ?? []) {
+    const id = value.trim().toLowerCase();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

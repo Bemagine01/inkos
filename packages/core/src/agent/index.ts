@@ -31,6 +31,7 @@ export {
   type AgentSessionResult,
 } from "./agent-session.js";
 export { createBookContextTransform } from "./context-transform.js";
+export { createUseSkillTool, type CreateUseSkillToolOptions } from "./skill-tool.js";
 export {
   createSetWorldAnchorTool,
   createUpsertCharactersTool,

@@ -10,10 +10,12 @@ export {
 export {
   loadConfiguredCapabilitySkills,
   loadExternalCapabilitySkills,
+  parseCapabilitySkillDocument,
   type ExternalSkillDiagnostic,
   type LoadConfiguredCapabilitySkillsInput,
   type LoadExternalCapabilitySkillsInput,
   type LoadExternalCapabilitySkillsResult,
+  type ParseCapabilitySkillDocumentOptions,
 } from "./external-loader.js";
 export {
   PromptPackPromptNotFoundError,

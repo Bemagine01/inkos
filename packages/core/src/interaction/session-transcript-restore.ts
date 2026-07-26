@@ -72,6 +72,7 @@ const emptyUsage = {
 export const TOOL_RESULT_BRIDGE_TEXT = "I have processed the tool results.";
 const MAX_RESTORED_DIALOGUE_MESSAGES = 12;
 const MAX_RESTORED_TOOL_SUMMARY_ITEMS = 8;
+const EXPIRED_SKILL_RESULT_TEXT = "Skill instructions expired after their original turn.";
 const RESTORED_HISTORY_BOUNDARY_ZH =
   "[已完成的历史上下文]\n" +
   "以上是已经完成并提交的历史上下文，只能用于回忆，不代表当前轮已经执行了动作。\n" +
@@ -443,7 +444,9 @@ function buildHistoricalToolSummary(
       : call?.tool ?? "tool";
     const agent = call?.agent;
     const status = raw.isError === true ? "failed" : "completed";
-    const text = textFromContent(raw.content).replace(/\s+/g, " ").trim();
+    const text = tool === "use_skill"
+      ? "expired; instructions are not active for later turns"
+      : textFromContent(raw.content).replace(/\s+/g, " ").trim();
     const trimmed = text.length > 180 ? `${text.slice(0, 180)}...` : text;
     summaries.push({
       timestamp: event.timestamp,
@@ -471,6 +474,23 @@ function requestIdsWithToolActivity(events: ReadonlyArray<MessageEvent>): Set<st
     const raw = event.message as Record<string, unknown>;
     if (!isObject(raw)) continue;
     if (contentBlocks(raw).some((block) => isObject(block) && block.type === "toolCall")) {
+      ids.add(event.requestId);
+    }
+  }
+  return ids;
+}
+
+function requestIdsUsingSkill(events: ReadonlyArray<MessageEvent>): Set<string> {
+  const ids = new Set<string>();
+  for (const event of events) {
+    if (event.role !== "assistant") continue;
+    const raw = event.message as Record<string, unknown>;
+    if (!isObject(raw)) continue;
+    if (contentBlocks(raw).some((block) => (
+      isObject(block)
+      && block.type === "toolCall"
+      && block.name === "use_skill"
+    ))) {
       ids.add(event.requestId);
     }
   }
@@ -546,7 +566,7 @@ function messageEventToInteractionMessage(
   event: MessageEvent,
   restoredToolExecutions?: ToolExecution[],
   restoredThinking?: ReadonlyArray<string>,
-  options: { suppressAssistantText?: boolean } = {},
+  options: { suppressAssistantText?: boolean; suppressThinking?: boolean } = {},
 ): InteractionMessage | null {
   const raw = event.message as Record<string, unknown>;
   if (!isObject(raw)) return null;
@@ -560,12 +580,14 @@ function messageEventToInteractionMessage(
   if (event.role === "assistant") {
     const rawText = textFromContent(raw.content);
     const content = options.suppressAssistantText ? "" : rawText;
-    const thinking = joinThinking([
-      ...(restoredThinking ?? []),
-      thinkingFromContent(raw.content),
-      event.legacyDisplay?.thinking,
-      options.suppressAssistantText ? rawText : undefined,
-    ]);
+    const thinking = options.suppressThinking
+      ? undefined
+      : joinThinking([
+          ...(restoredThinking ?? []),
+          thinkingFromContent(raw.content),
+          event.legacyDisplay?.thinking,
+          options.suppressAssistantText ? rawText : undefined,
+        ]);
     const toolExecutions = restoredToolExecutions?.length
       ? restoredToolExecutions
       : event.legacyDisplay?.toolExecutions as ToolExecution[] | undefined;
@@ -622,6 +644,7 @@ function messageEventsToInteractionMessages(events: MessageEvent[]): Interaction
 
   const messages: InteractionMessage[] = [];
   const toolCalls = new Map<string, RestoredToolCall>();
+  const skillRequestIds = requestIdsUsingSkill(events);
   let pendingToolExecutions: ToolExecution[] = [];
   let pendingThinking: string[] = [];
   let activeRequestId: string | null = null;
@@ -718,6 +741,7 @@ function messageEventsToInteractionMessages(events: MessageEvent[]): Interaction
     const text = textFromContent(raw.content).trim();
     const isError = raw.isError === true;
     const details = raw.details;
+    const expiredSkill = tool === "use_skill";
 
     return {
       id: toolCallId,
@@ -728,10 +752,16 @@ function messageEventsToInteractionMessages(events: MessageEvent[]): Interaction
       ...(args ? { args } : {}),
       ...(isError
         ? { error: text.slice(0, 500) || "Tool execution failed" }
-        : text
+        : expiredSkill
+          ? { result: EXPIRED_SKILL_RESULT_TEXT }
+          : text
           ? { result: text.slice(0, 200) }
           : {}),
-      ...(details !== undefined ? { details } : {}),
+      ...(expiredSkill
+        ? { details: { kind: "skill_expired" } }
+        : details !== undefined
+          ? { details }
+          : {}),
       startedAt: call?.timestamp ?? event.timestamp,
       completedAt: event.timestamp,
     };
@@ -747,10 +777,13 @@ function messageEventsToInteractionMessages(events: MessageEvent[]): Interaction
 
     if (event.role === "assistant" && isObject(raw)) {
       rememberToolCalls(event, raw);
-      const currentThinking = thinkingFromContent(raw.content);
+      const isSkillRequest = skillRequestIds.has(event.requestId);
+      const currentThinking = isSkillRequest ? undefined : thinkingFromContent(raw.content);
       const currentText = textFromContent(raw.content).trim();
       const legacyToolExecutions = event.legacyDisplay?.toolExecutions as ToolExecution[] | undefined;
-      const hasLegacyDisplay = !!currentThinking || !!event.legacyDisplay?.thinking || !!legacyToolExecutions?.length;
+      const hasLegacyDisplay = !!currentThinking
+        || (!isSkillRequest && !!event.legacyDisplay?.thinking)
+        || !!legacyToolExecutions?.length;
       if (
         pendingToolExecutions.length > 0
         && !hasCompletedPlayTool(pendingToolExecutions)
@@ -768,7 +801,10 @@ function messageEventsToInteractionMessages(events: MessageEvent[]): Interaction
         event,
         pendingToolExecutions.length > 0 ? pendingToolExecutions : undefined,
         pendingThinking.length > 0 ? pendingThinking : undefined,
-        { suppressAssistantText: hasCompletedPlayTool(pendingToolExecutions) },
+        {
+          suppressAssistantText: hasCompletedPlayTool(pendingToolExecutions),
+          suppressThinking: isSkillRequest,
+        },
       );
       if (message) {
         messages.push(message);

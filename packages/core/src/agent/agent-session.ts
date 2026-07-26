@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Agent } from "@mariozechner/pi-agent-core";
 import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
 import { streamSimple, getModel, getEnvApiKey, createAssistantMessageEventStream } from "@mariozechner/pi-ai";
@@ -67,6 +67,11 @@ import { createSkillRegistry, loadConfiguredCapabilitySkills } from "../skills/i
 import { assertSafeBookId } from "../utils/book-id.js";
 import { PlayStore } from "../play/play-store.js";
 import { isLlmStubEnabled, stubAgentStream } from "./llm-stub.js";
+import {
+  assistantInvokesSkill,
+  createUseSkillTool,
+  sanitizeSkillTurnMessage,
+} from "./skill-tool.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -163,6 +168,7 @@ interface CachedAgent {
   requestedIntent: AgentSessionConfig["requestedIntent"];
   actionPayloadKey: string;
   skillResolutionKey: string;
+  turnSkillIds: Set<string>;
   playWorldExists: boolean;
   language: string;
   modelIdentity: string;
@@ -263,8 +269,16 @@ function skillResolutionCacheKey(value: {
   readonly forcedSkillIds: ReadonlyArray<string>;
   readonly missingSkillIds: ReadonlyArray<string>;
   readonly disabledSkillIds: ReadonlyArray<string>;
+  readonly availableSkills: ReadonlyArray<{
+    readonly id: string;
+    readonly name: string;
+    readonly description: string;
+    readonly whenToUse: string;
+    readonly body?: string;
+    readonly baseDir?: string;
+  }>;
 }): string {
-  return JSON.stringify({
+  return createHash("sha256").update(JSON.stringify({
     used: value.usedSkills.map((skill) => ({
       id: skill.id,
       source: skill.source,
@@ -275,7 +289,15 @@ function skillResolutionCacheKey(value: {
     forced: value.forcedSkillIds,
     missing: value.missingSkillIds,
     disabled: value.disabledSkillIds,
-  });
+    available: value.availableSkills.map((skill) => ({
+      id: skill.id,
+      name: skill.name,
+      description: skill.description,
+      whenToUse: skill.whenToUse,
+      body: skill.body ?? "",
+      baseDir: skill.baseDir ?? "",
+    })),
+  })).digest("hex");
 }
 
 function sessionQueueKey(projectRoot: string, sessionId: string): string {
@@ -778,7 +800,7 @@ const PRODUCTION_MUTATION_TOOL_NAMES = new Set([
   "import_chapters",
 ]);
 
-function createAgentToolsForMode(params: {
+type CreateAgentToolsForModeParams = {
   readonly pipeline: PipelineRunner;
   readonly bookId: string | null;
   readonly sessionId: string;
@@ -791,7 +813,16 @@ function createAgentToolsForMode(params: {
   readonly language: string;
   readonly playMode?: "open" | "guided";
   readonly playWorldExists: boolean;
-}) {
+  readonly intentSkillTool?: ReturnType<typeof createUseSkillTool>;
+  readonly requestedSkillIds?: () => ReadonlyArray<string>;
+};
+
+function createAgentToolsForMode(params: CreateAgentToolsForModeParams) {
+  const tools = createModeTools(params);
+  return params.intentSkillTool ? [...tools, params.intentSkillTool] : tools;
+}
+
+function createModeTools(params: CreateAgentToolsForModeParams) {
   const lang = params.language === "en" ? "en" : "zh";
   const subAgentTool = createSubAgentTool(params.pipeline, params.bookId, params.projectRoot, {
     actionPayload: params.actionPayload,
@@ -799,6 +830,7 @@ function createAgentToolsForMode(params: {
   });
   const proposalTool = createProposeActionTool(lang, {
     sameSession: params.sessionKind !== "chat",
+    requestedSkillIds: params.requestedSkillIds,
   });
   const researchTool = createResearchWebTool(params.projectRoot);
   const materialTool = createIngestMaterialTool(params.projectRoot);
@@ -970,11 +1002,10 @@ async function runAgentSessionUnlocked(
   const actionPayload = config.actionPayload;
   const actionPayloadKey = actionPayloadCacheKey(actionPayload);
   const configuredSkills = await loadConfiguredCapabilitySkills({ projectRoot });
-  const skillResolution = createSkillRegistry({ skills: configuredSkills.skills }).resolveSkills({
+  const skillRegistry = createSkillRegistry({ skills: configuredSkills.skills });
+  const skillResolution = skillRegistry.resolveSkills({
     requestedSkills: config.requestedSkills,
     disabledSkills: config.disabledSkills,
-    sessionKind,
-    instruction: userMessage,
   });
   const skillResolutionKey = skillResolutionCacheKey(skillResolution);
   const model = resolveModel(config.model);
@@ -1061,12 +1092,23 @@ async function runAgentSessionUnlocked(
         ? plainToAgentMessages(initialMessages)
         : [];
     let terminalToolResultTail = false;
+    const turnSkillIds = new Set(skillResolution.forcedSkillIds);
+    const allowIntentSkillSelection = actionSource === "free-text"
+      && skillResolution.forcedSkillIds.length === 0;
     const baseSystemPrompt = buildAgentSystemPrompt(bookId, language, sessionKind, {
       actionSource,
       requestedIntent,
       playWorldExists,
       skills: skillResolution,
+      allowIntentSkillSelection,
     });
+    const intentSkillTool = allowIntentSkillSelection
+      ? createUseSkillTool({
+          registry: skillRegistry,
+          disabledSkillIds: skillResolution.disabledSkillIds,
+          onActivate: (skillId) => turnSkillIds.add(skillId),
+        })
+      : undefined;
     const agentTools = createAgentToolsForMode({
       pipeline,
       bookId,
@@ -1080,6 +1122,8 @@ async function runAgentSessionUnlocked(
       language,
       playMode,
       playWorldExists,
+      intentSkillTool,
+      requestedSkillIds: () => [...turnSkillIds],
     });
     const agent = new Agent({
       initialState: {
@@ -1121,6 +1165,7 @@ async function runAgentSessionUnlocked(
       requestedIntent,
       actionPayloadKey,
       skillResolutionKey,
+      turnSkillIds,
       playWorldExists,
       language,
       modelIdentity: requestedModelIdentity,
@@ -1136,6 +1181,10 @@ async function runAgentSessionUnlocked(
   }
 
   cached.lastActive = Date.now();
+  cached.turnSkillIds.clear();
+  for (const skillId of skillResolution.forcedSkillIds) {
+    cached.turnSkillIds.add(skillId);
+  }
   const { agent } = cached;
   const attachmentBlock = buildAttachmentUserBlock(config.attachments, language);
   const promptMessage = attachmentBlock ? `${userMessage}${attachmentBlock}` : userMessage;
@@ -1159,6 +1208,7 @@ async function runAgentSessionUnlocked(
   let piTurnIndex = 0;
   let lastAssistantUuid: string | null = null;
   let successfulProductionToolResultSeen = false;
+  let skillTurnActive = cached.turnSkillIds.size > 0;
 
   const persistAgentEvent = async (event: AgentEvent): Promise<void> => {
     if (event.type === "turn_start") {
@@ -1185,6 +1235,8 @@ async function runAgentSessionUnlocked(
       }
     }
 
+    if (assistantInvokesSkill(event.message)) skillTurnActive = true;
+    const persistedMessage = sanitizeSkillTurnMessage(event.message, skillTurnActive);
     const uuid = randomUUID();
     const isToolResult = role === "toolResult";
     const toolCallId = toolCallIdForMessage(event.message);
@@ -1203,7 +1255,7 @@ async function runAgentSessionUnlocked(
       ...(isToolResult && lastAssistantUuid
         ? { sourceToolAssistantUuid: lastAssistantUuid }
         : {}),
-      message: event.message,
+      message: persistedMessage,
     }));
 
     if (role === "assistant") lastAssistantUuid = uuid;
@@ -1219,6 +1271,7 @@ async function runAgentSessionUnlocked(
   // ----- Execute the turn -----
   let finalAssistant: AssistantMessage | undefined;
   let errorMessage: string | undefined;
+  const turnMessageStartIndex = agent.state.messages.length;
 
   try {
     if (promptImages.length > 0) {
@@ -1228,6 +1281,12 @@ async function runAgentSessionUnlocked(
     }
 
     finalAssistant = lastAssistantMessage(agent.state.messages);
+    agent.state.messages = agent.state.messages.map((message, index) => (
+      sanitizeSkillTurnMessage(
+        message,
+        skillTurnActive && index >= turnMessageStartIndex,
+      )
+    ));
     errorMessage = assistantErrorMessage(finalAssistant);
     if (errorMessage) {
       const failedError = errorMessage;

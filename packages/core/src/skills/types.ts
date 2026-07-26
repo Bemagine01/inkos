@@ -17,17 +17,16 @@ export const SkillContextNeedSchema = z.object({
 export type SkillContextNeed = z.infer<typeof SkillContextNeedSchema>;
 
 export const CapabilitySkillManifestSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string().min(1),
-  whenToUse: z.string().min(1),
-  triggers: z.array(z.string().min(1)).default([]),
-  sessionKinds: z.array(z.string().min(1)).default([]),
+  id: z.string().min(1).max(64),
+  name: z.string().min(1).max(64),
+  description: z.string().min(1).max(1024),
+  whenToUse: z.string().min(1).max(1024),
   promptPacks: z.array(z.string().min(1)).default([]),
   toolHints: z.array(z.string().min(1)).default([]),
   contextNeeds: z.array(SkillContextNeedSchema).default([]),
   body: z.string().default(""),
   source: z.enum(["builtin", "project", "user", "external"]).default("builtin"),
+  baseDir: z.string().min(1).optional(),
 });
 export type CapabilitySkillManifest = z.infer<typeof CapabilitySkillManifestSchema>;
 
@@ -43,21 +42,14 @@ export type PromptPackManifest = z.infer<typeof PromptPackManifestSchema>;
 export interface SkillResolutionInput {
   readonly requestedSkills?: ReadonlyArray<string>;
   readonly disabledSkills?: ReadonlyArray<string>;
-  readonly sessionKind?: string;
-  readonly instruction?: string;
-  /**
-   * Optional future seam for an agent/model to propose candidate skill ids.
-   * The registry validates and filters those ids instead of relying on prose.
-   */
-  readonly candidateSkills?: ReadonlyArray<string>;
 }
 
 export interface SkillResolutionResult {
   readonly usedSkills: ReadonlyArray<CapabilitySkillManifest>;
   readonly forcedSkillIds: ReadonlyArray<string>;
-  readonly autoSkillIds: ReadonlyArray<string>;
   readonly missingSkillIds: ReadonlyArray<string>;
   readonly disabledSkillIds: ReadonlyArray<string>;
+  readonly availableSkills: ReadonlyArray<CapabilitySkillManifest>;
   readonly availableSkillIds: ReadonlyArray<string>;
 }
 

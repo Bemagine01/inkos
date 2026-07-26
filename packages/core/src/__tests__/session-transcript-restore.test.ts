@@ -172,6 +172,82 @@ describe("session transcript restore", () => {
     expect(body).not.toContain(TOOL_RESULT_BRIDGE_TEXT);
   });
 
+  it("恢复旧 transcript 时不会把 use_skill 正文带入后续回合", async () => {
+    await appendTranscriptEvent(projectRoot, {
+      type: "request_started",
+      version: 1,
+      sessionId: "s1",
+      requestId: "r1",
+      seq: 1,
+      timestamp: 1,
+      input: "use specialist skill",
+    });
+    await appendTranscriptEvent(projectRoot, {
+      type: "message",
+      version: 1,
+      sessionId: "s1",
+      requestId: "r1",
+      uuid: "a1",
+      parentUuid: null,
+      seq: 2,
+      role: "assistant",
+      timestamp: 2,
+      message: {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "LEGACY_PRIVATE_SKILL_THINKING" },
+          { type: "toolCall", id: "skill-1", name: "use_skill", arguments: { skillId: "specialist" } },
+        ],
+        api: "anthropic-messages",
+        provider: "anthropic",
+        model: "claude",
+        usage,
+        stopReason: "tool_use",
+        timestamp: 2,
+      },
+    } as MessageEvent);
+    await appendTranscriptEvent(projectRoot, {
+      type: "message",
+      version: 1,
+      sessionId: "s1",
+      requestId: "r1",
+      uuid: "t1",
+      parentUuid: "a1",
+      seq: 3,
+      role: "toolResult",
+      timestamp: 3,
+      toolCallId: "skill-1",
+      sourceToolAssistantUuid: "a1",
+      message: {
+        role: "toolResult",
+        toolCallId: "skill-1",
+        toolName: "use_skill",
+        content: [{ type: "text", text: "LEGACY_PRIVATE_SKILL_GUIDANCE" }],
+        details: { kind: "skill_activated", skillId: "specialist" },
+        isError: false,
+        timestamp: 3,
+      },
+    } as MessageEvent);
+    await appendTranscriptEvent(projectRoot, {
+      type: "request_committed",
+      version: 1,
+      sessionId: "s1",
+      requestId: "r1",
+      seq: 4,
+      timestamp: 4,
+    });
+
+    const body = JSON.stringify(await restoreAgentMessagesFromTranscript(projectRoot, "s1"));
+    expect(body).toContain("use_skill");
+    expect(body).toContain("expired");
+    expect(body).not.toContain("LEGACY_PRIVATE_SKILL_GUIDANCE");
+
+    const sessionBody = JSON.stringify(await deriveBookSessionFromTranscript(projectRoot, "s1"));
+    expect(sessionBody).toContain("use_skill");
+    expect(sessionBody).not.toContain("LEGACY_PRIVATE_SKILL_GUIDANCE");
+    expect(sessionBody).not.toContain("LEGACY_PRIVATE_SKILL_THINKING");
+  });
+
   it("恢复 agent 上下文时把历史工具回合折叠为 system 摘要而不是继续回放工具消息", async () => {
     await appendTranscriptEvent(projectRoot, {
       type: "request_started",

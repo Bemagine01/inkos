@@ -1,11 +1,15 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { delimiter, isAbsolute, join } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
 import yaml from "js-yaml";
 import {
   CapabilitySkillManifestSchema,
   type CapabilitySkillManifest,
 } from "./types.js";
+
+const MAX_SKILL_MANIFEST_BYTES = 2 * 1024 * 1024;
+const MAX_SKILL_NAME_CHARS = 64;
+const MAX_SKILL_DESCRIPTION_CHARS = 1024;
 
 export interface LoadExternalCapabilitySkillsInput {
   readonly externalDirs: ReadonlyArray<string>;
@@ -25,6 +29,11 @@ export interface LoadConfiguredCapabilitySkillsInput {
   readonly projectRoot: string;
   readonly env?: NodeJS.ProcessEnv | Record<string, string | undefined>;
   readonly userRoot?: string;
+}
+
+export interface ParseCapabilitySkillDocumentOptions {
+  readonly skillPath: string;
+  readonly source?: CapabilitySkillManifest["source"];
 }
 
 export async function loadExternalCapabilitySkills(
@@ -85,10 +94,15 @@ function configuredSkillDirs(input: LoadConfiguredCapabilitySkillsInput): Config
     .map((value) => value.trim())
     .filter(Boolean);
   const userRoot = input.userRoot ?? join(homedir(), ".inkos");
+  const homeRoot = dirname(userRoot);
   return [
-    { path: join(input.projectRoot, ".inkos", "skills"), explicit: false },
-    { path: join(userRoot, "skills"), explicit: false },
     ...envDirs.map((path) => ({ path, explicit: true })),
+    { path: join(homeRoot, ".openclaw", "skills"), explicit: false },
+    { path: join(homeRoot, ".agents", "skills"), explicit: false },
+    { path: join(userRoot, "skills"), explicit: false },
+    { path: join(input.projectRoot, ".agents", "skills"), explicit: false },
+    { path: join(input.projectRoot, "skills"), explicit: false },
+    { path: join(input.projectRoot, ".inkos", "skills"), explicit: false },
   ];
 }
 
@@ -113,15 +127,25 @@ async function discoverSkillDirs(externalDirs: ReadonlyArray<string>): Promise<s
       dirs.push(dir);
       continue;
     }
-
-    const entries = await readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const child = join(dir, entry.name);
-      if (await hasSkillManifest(child)) dirs.push(child);
-    }
+    dirs.push(...await discoverSkillDirsBelow(dir, 2));
   }
   return [...new Set(dirs)].sort();
+}
+
+async function discoverSkillDirsBelow(root: string, remainingDepth: number): Promise<string[]> {
+  if (remainingDepth <= 0) return [];
+  const dirs: string[] = [];
+  const entries = await readdir(root, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const child = join(root, entry.name);
+    if (await hasSkillManifest(child)) {
+      dirs.push(child);
+      continue;
+    }
+    dirs.push(...await discoverSkillDirsBelow(child, remainingDepth - 1));
+  }
+  return dirs;
 }
 
 async function hasSkillManifest(dir: string): Promise<boolean> {
@@ -134,20 +158,55 @@ async function hasSkillManifest(dir: string): Promise<boolean> {
 }
 
 async function loadSkillManifest(skillPath: string): Promise<CapabilitySkillManifest> {
+  const info = await stat(skillPath);
+  if (info.size > MAX_SKILL_MANIFEST_BYTES) {
+    throw new Error(`SKILL.md exceeds ${MAX_SKILL_MANIFEST_BYTES} bytes.`);
+  }
   const raw = await readFile(skillPath, "utf-8");
+  return parseCapabilitySkillDocument(raw, { skillPath });
+}
+
+export function parseCapabilitySkillDocument(
+  raw: string,
+  options: ParseCapabilitySkillDocumentOptions,
+): CapabilitySkillManifest {
   const parsed = parseFrontmatter(raw);
   if (!parsed.data || typeof parsed.data !== "object" || Array.isArray(parsed.data)) {
     throw new Error("SKILL.md frontmatter must be a YAML object.");
   }
+  const data = parsed.data as Record<string, unknown>;
+  const fallbackId = basename(dirname(options.skillPath));
+  const name = requiredText(data.name, "name", MAX_SKILL_NAME_CHARS);
+  const description = requiredText(
+    data.description,
+    "description",
+    MAX_SKILL_DESCRIPTION_CHARS,
+  );
+  const id = normalizeExternalSkillId(
+    optionalText(data.id) ?? name,
+    fallbackId,
+  );
+  const whenToUse = boundedOptionalText(data.whenToUse, "whenToUse", MAX_SKILL_DESCRIPTION_CHARS)
+    ?? optionalText(data["when-to-use"])
+    ?? optionalText(data.when_to_use)
+    ?? description;
+  if (whenToUse.length > MAX_SKILL_DESCRIPTION_CHARS) {
+    throw new Error(`SKILL.md frontmatter whenToUse must be at most ${MAX_SKILL_DESCRIPTION_CHARS} characters.`);
+  }
   return CapabilitySkillManifestSchema.parse({
-    ...(parsed.data as Record<string, unknown>),
+    ...data,
+    id,
+    name,
+    description,
+    whenToUse,
     body: parsed.body.trim(),
-    source: "external",
+    source: options.source ?? "external",
+    baseDir: dirname(options.skillPath),
   });
 }
 
 function parseFrontmatter(raw: string): { readonly data: unknown; readonly body: string } {
-  const normalized = raw.replace(/^\uFEFF/, "");
+  const normalized = raw.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
   if (!normalized.startsWith("---\n")) {
     throw new Error("SKILL.md must start with YAML frontmatter delimiters.");
   }
@@ -161,4 +220,40 @@ function parseFrontmatter(raw: string): { readonly data: unknown; readonly body:
     data: yaml.load(frontmatter),
     body,
   };
+}
+
+function optionalText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function requiredText(value: unknown, field: string, maxChars?: number): string {
+  const text = optionalText(value);
+  if (!text) throw new Error(`SKILL.md frontmatter requires ${field}.`);
+  if (maxChars !== undefined && text.length > maxChars) {
+    throw new Error(`SKILL.md frontmatter ${field} must be at most ${maxChars} characters.`);
+  }
+  return text;
+}
+
+function boundedOptionalText(value: unknown, field: string, maxChars: number): string | undefined {
+  const text = optionalText(value);
+  if (text && text.length > maxChars) {
+    throw new Error(`SKILL.md frontmatter ${field} must be at most ${maxChars} characters.`);
+  }
+  return text;
+}
+
+function normalizeExternalSkillId(value: string, fallback: string): string {
+  const normalize = (candidate: string): string => candidate
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const id = normalize(value) || normalize(fallback);
+  if (!id) throw new Error("SKILL.md requires a name that can be used as a skill id.");
+  const normalized = /^[a-z]/.test(id) ? id : `skill-${id}`;
+  if (normalized.length > MAX_SKILL_NAME_CHARS) {
+    throw new Error(`SKILL.md skill id must be at most ${MAX_SKILL_NAME_CHARS} characters.`);
+  }
+  return normalized;
 }

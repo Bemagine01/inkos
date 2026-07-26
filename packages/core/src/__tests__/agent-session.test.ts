@@ -114,6 +114,20 @@ vi.mock("@mariozechner/pi-ai", async () => {
               },
             },
           ], timestamp)
+        : prompt === "activate specialist skill"
+        ? assistant([
+            {
+              type: "thinking",
+              thinking: "I will apply TURN_ONLY_SECRET_GUIDANCE for this request.",
+              thinkingSignature: "skill-thought-signature",
+            },
+            {
+              type: "toolCall",
+              id: "skill-1",
+              name: "use_skill",
+              arguments: { skillId: "specialist-skill" },
+            },
+          ], timestamp)
         : prompt === "revise play"
         ? assistant([
             {
@@ -246,6 +260,7 @@ describe("runAgentSession cache — bookId switch", () => {
     evictAgentCache("play-session");
     evictAgentCache("play-active-session");
     evictAgentCache("play-confirmed-session");
+    evictAgentCache("skill-history-session");
     evictAgentCache("abort-session");
     await rm(projectRoot, { recursive: true, force: true });
     if (otherProjectRoot) await rm(otherProjectRoot, { recursive: true, force: true });
@@ -607,7 +622,123 @@ describe("runAgentSession cache — bookId switch", () => {
       "ingest_material",
       "retrieve_material",
       "import_chapters",
+      "use_skill",
     ]);
+  });
+
+  it("exposes intent-selected skills only on free-text turns", async () => {
+    const model = { provider: "x", id: "y", api: "anthropic-messages" } as any;
+    const pipeline = {} as any;
+
+    await runAgentSession(
+      {
+        sessionId: "skill-free-text-session",
+        bookId: null,
+        sessionKind: "book-create",
+        language: "zh",
+        pipeline,
+        projectRoot,
+        model,
+      },
+      "我想把一批真实样本拆明白再开始创作",
+    );
+
+    expect(agentInstances[0].state.tools.map((tool: any) => tool.name)).toContain("use_skill");
+    expect(agentInstances[0].state.systemPrompt).toContain("可按意图调用的 Skill");
+
+    await runAgentSession(
+      {
+        sessionId: "skill-confirmed-session",
+        bookId: null,
+        sessionKind: "book-create",
+        actionSource: "button",
+        requestedIntent: "create_book",
+        requestedSkills: ["longform-writing"],
+        language: "zh",
+        pipeline,
+        projectRoot,
+        model,
+      },
+      "确认创建这本书",
+    );
+
+    expect(agentInstances[1].state.tools.map((tool: any) => tool.name)).not.toContain("use_skill");
+    expect(agentInstances[1].state.systemPrompt).toContain("longform-writing");
+  });
+
+  it("uses an explicitly requested skill without also exposing autonomous skill selection", async () => {
+    const model = { provider: "x", id: "y", api: "anthropic-messages" } as any;
+    const pipeline = {} as any;
+
+    await runAgentSession(
+      {
+        sessionId: "forced-skill-session",
+        bookId: null,
+        sessionKind: "chat",
+        requestedSkills: ["open-world-play"],
+        language: "zh",
+        pipeline,
+        projectRoot,
+        model,
+      },
+      "按这个专业能力分析我的世界设定",
+    );
+
+    expect(agentInstances[0].state.tools.map((tool: any) => tool.name)).not.toContain("use_skill");
+    expect(agentInstances[0].state.systemPrompt).toContain("open-world-play (强制)");
+    expect(agentInstances[0].state.systemPrompt).not.toContain("可按意图调用的 Skill");
+  });
+
+  it("expires intent-selected skill instructions before the next turn and transcript restore", async () => {
+    const skillDir = join(projectRoot, ".inkos", "skills", "specialist-skill");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, "SKILL.md"),
+      [
+        "---",
+        "name: specialist-skill",
+        "description: Use for a narrow specialist request.",
+        "---",
+        "TURN_ONLY_SECRET_GUIDANCE",
+      ].join("\n"),
+      "utf-8",
+    );
+    const model = { provider: "x", id: "y", api: "anthropic-messages" } as any;
+    const pipeline = {} as any;
+
+    const first = await runAgentSession(
+      {
+        sessionId: "skill-history-session",
+        bookId: null,
+        sessionKind: "chat",
+        language: "zh",
+        pipeline,
+        projectRoot,
+        model,
+      },
+      "activate specialist skill",
+    );
+
+    expect(JSON.stringify(streamCalls[1]?.context.messages)).toContain("TURN_ONLY_SECRET_GUIDANCE");
+    expect(JSON.stringify(first.messages)).not.toContain("TURN_ONLY_SECRET_GUIDANCE");
+    expect(JSON.stringify(await readTranscriptEvents(projectRoot, "skill-history-session")))
+      .not.toContain("TURN_ONLY_SECRET_GUIDANCE");
+
+    await runAgentSession(
+      {
+        sessionId: "skill-history-session",
+        bookId: null,
+        sessionKind: "chat",
+        language: "zh",
+        pipeline,
+        projectRoot,
+        model,
+      },
+      "next turn without skill",
+    );
+
+    expect(JSON.stringify(streamCalls.at(-1)?.context.messages))
+      .not.toContain("TURN_ONLY_SECRET_GUIDANCE");
   });
 
   it("gates book creation behind an in-session confirmation proposal", async () => {
@@ -624,6 +755,7 @@ describe("runAgentSession cache — bookId switch", () => {
       "research_web",
       "ingest_material",
       "retrieve_material",
+      "use_skill",
     ]);
   });
 
@@ -681,6 +813,7 @@ describe("runAgentSession cache — bookId switch", () => {
       "propose_action",
       "ingest_material",
       "retrieve_material",
+      "use_skill",
     ]);
 
     await runAgentSession(
@@ -691,6 +824,7 @@ describe("runAgentSession cache — bookId switch", () => {
       "propose_action",
       "ingest_material",
       "retrieve_material",
+      "use_skill",
     ]);
   });
 
@@ -849,6 +983,7 @@ describe("runAgentSession cache — bookId switch", () => {
       "play_step",
       "ingest_material",
       "retrieve_material",
+      "use_skill",
     ]);
   });
 
@@ -942,6 +1077,7 @@ describe("runAgentSession cache — bookId switch", () => {
       "select_narrative_branch",
       "grep",
       "ls",
+      "use_skill",
     ]);
   });
 
@@ -966,6 +1102,7 @@ describe("runAgentSession cache — bookId switch", () => {
       "select_narrative_branch",
       "grep",
       "ls",
+      "use_skill",
     ]);
 
     // 任务结束：flag 变化必须让缓存的 Agent 重建，生产工具恢复
@@ -991,6 +1128,7 @@ describe("runAgentSession cache — bookId switch", () => {
       "select_narrative_branch",
       "grep",
       "ls",
+      "use_skill",
     ]);
   });
 
@@ -1013,6 +1151,7 @@ describe("runAgentSession cache — bookId switch", () => {
       "retrieve_material",
       "grep",
       "ls",
+      "use_skill",
     ]);
   });
 
