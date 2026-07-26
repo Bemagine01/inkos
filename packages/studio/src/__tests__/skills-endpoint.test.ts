@@ -25,8 +25,6 @@ describe("Studio skill endpoints", () => {
         "name: Detective Play",
         "description: Evidence-chain play skill.",
         "whenToUse: Use for detective play.",
-        "triggers: [detective]",
-        "sessionKinds: [play]",
         "---",
         "Track evidence before twists.",
       ].join("\n"),
@@ -58,8 +56,6 @@ describe("Studio skill endpoints", () => {
         name: "Romance Play",
         description: "Relationship-focused play skill.",
         whenToUse: "Use for romance interactions.",
-        triggers: ["romance"],
-        sessionKinds: ["play"],
         body: "Keep emotional continuity visible.",
       }),
     });
@@ -76,8 +72,6 @@ describe("Studio skill endpoints", () => {
         name: "Romance Play",
         description: "Relationship-focused play skill.",
         whenToUse: "Use for romance interactions.",
-        triggers: ["romance", "date"],
-        sessionKinds: ["play"],
         body: "Track longing, avoidance, and revealed care.",
       }),
     });
@@ -115,5 +109,101 @@ describe("Studio skill endpoints", () => {
       description: "Project runtime skill.",
       whenToUse: "Use when explicitly selected by the user.",
     });
+  });
+
+  it("imports a standard AgentSkills folder without manual InkOS fields", async () => {
+    const app = createStudioServer({} as never, root);
+    const manifest = Buffer.from([
+      "---",
+      "name: writer-distillation",
+      "description: Distill a writer's craft when the user asks for style analysis.",
+      "---",
+      "Read references/rubric.md and extract transferable craft.",
+    ].join("\n")).toString("base64");
+    const rubric = Buffer.from("# Rubric\nPrefer scene evidence.", "utf-8").toString("base64");
+
+    const response = await app.request("/api/v1/skills/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        files: [
+          { path: "writer-distillation/SKILL.md", dataUrl: `data:text/markdown;base64,${manifest}` },
+          { path: "writer-distillation/references/rubric.md", dataUrl: `data:text/markdown;base64,${rubric}` },
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const json = await response.json() as { skill: { id: string; editable: boolean } };
+    expect(json.skill).toMatchObject({ id: "writer-distillation", editable: true });
+    expect(await readFile(
+      join(root, ".inkos", "skills", "writer-distillation", "references", "rubric.md"),
+      "utf-8",
+    )).toContain("Prefer scene evidence");
+  });
+
+  it("rejects traversal and does not overwrite an imported skill without confirmation", async () => {
+    const app = createStudioServer({} as never, root);
+    const manifest = Buffer.from([
+      "---",
+      "name: writer-distillation",
+      "description: Distill writer craft.",
+      "---",
+      "Distill craft.",
+    ].join("\n")).toString("base64");
+    const payload = {
+      files: [
+        { path: "writer-distillation/SKILL.md", dataUrl: `data:text/markdown;base64,${manifest}` },
+      ],
+    };
+
+    expect((await app.request("/api/v1/skills/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })).status).toBe(200);
+    expect((await app.request("/api/v1/skills/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })).status).toBe(409);
+
+    const traversal = await app.request("/api/v1/skills/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        files: [
+          ...payload.files,
+          { path: "writer-distillation/../outside.txt", dataUrl: "data:text/plain;base64,bm8=" },
+        ],
+      }),
+    });
+    expect(traversal.status).toBe(400);
+  });
+
+  it("rejects import paths that collide on case-insensitive filesystems", async () => {
+    const app = createStudioServer({} as never, root);
+    const manifest = Buffer.from([
+      "---",
+      "name: portable-skill",
+      "description: Portable skill folder.",
+      "---",
+      "Use the static reference.",
+    ].join("\n")).toString("base64");
+
+    const response = await app.request("/api/v1/skills/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        files: [
+          { path: "portable-skill/SKILL.md", dataUrl: `data:text/markdown;base64,${manifest}` },
+          { path: "portable-skill/References/rubric.md", dataUrl: "data:text/plain;base64,b25l" },
+          { path: "portable-skill/references/RUBRIC.md", dataUrl: "data:text/plain;base64,dHdv" },
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "INVALID_SKILL_IMPORT" } });
   });
 });

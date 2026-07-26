@@ -148,6 +148,7 @@ export interface ProposedActionDetails {
   readonly title?: string;
   readonly summary?: string;
   readonly instruction?: string;
+  readonly requestedSkills?: ReadonlyArray<string>;
   readonly actionPayload?: ChatActionPayload;
 }
 
@@ -176,6 +177,18 @@ function actionPayloadField(record: Record<string, unknown>): ChatActionPayload 
   const value = record.actionPayload;
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   return value as ChatActionPayload;
+}
+
+function stringArrayField(record: Record<string, unknown>, key: string): string[] | undefined {
+  const value = record[key];
+  if (!Array.isArray(value)) return undefined;
+  const out = Array.from(new Set(
+    value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean),
+  ));
+  return out.length > 0 ? out : undefined;
 }
 
 function proposedTargetRouteField(record: Record<string, unknown>): ProposedActionDetails["targetRoute"] {
@@ -477,6 +490,7 @@ export function getProposedActionDetails(exec: ToolExecution): ProposedActionDet
     title: stringField(record, "title"),
     summary: stringField(record, "summary"),
     instruction,
+    requestedSkills: stringArrayField(record, "requestedSkills"),
     actionPayload: actionPayloadField(record),
   };
 }

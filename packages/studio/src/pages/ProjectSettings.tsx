@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Bell, Bot, FileText, MessageSquare, Radar, RotateCcw, Search, Settings2, Plus, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Bell, Bot, FileText, FolderUp, MessageSquare, Radar, RotateCcw, Search, Settings2, Plus, Trash2 } from "lucide-react";
 import { fetchJson, postApi, putApi, useApi } from "../hooks/use-api";
 import { usePreferencesStore } from "../store/preferences";
 import type { Theme } from "../hooks/use-theme";
@@ -19,6 +19,7 @@ import {
 } from "./project-settings-model";
 import {
   createEmptySkillDraft,
+  serializeSkillFolder,
   skillDraftFromSkill,
   skillDraftToPayload,
   type SkillDraft,
@@ -117,6 +118,7 @@ export function ProjectSettings({ nav, theme, t }: { nav: Nav; theme: Theme; t: 
   const [promptDraft, setPromptDraft] = useState("");
   const [notice, setNotice] = useState<{ tone: NoticeTone; message: string } | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const skillFolderInputRef = useRef<HTMLInputElement>(null);
   const toolDetailsDefaultOpen = usePreferencesStore((s) => s.toolDetailsDefaultOpen);
   const setToolDetailsDefaultOpen = usePreferencesStore((s) => s.setToolDetailsDefaultOpen);
   const skills = skillsData?.skills ?? [];
@@ -190,6 +192,15 @@ export function ProjectSettings({ nav, theme, t }: { nav: Nav; theme: Theme; t: 
     } finally {
       setSaving(null);
     }
+  };
+
+  const importSkillFolder = async (files: FileList | null) => {
+    if (!files?.length) return;
+    await runSave("skill-import", async () => {
+      const serialized = await serializeSkillFolder(files);
+      await postApi("/skills/import", { files: serialized });
+      await refetchSkills();
+    }, isZh ? "Skill 文件夹已导入" : "Skill folder imported");
   };
 
   const updateChannel = (index: number, patch: Partial<NotifyChannelDraft>) => {
@@ -268,6 +279,48 @@ export function ProjectSettings({ nav, theme, t }: { nav: Nav; theme: Theme; t: 
         icon={<Bot size={18} />}
       >
         <div className="space-y-3">
+          {skillsData?.diagnostics?.length ? (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              <div className="font-semibold">{isZh ? "部分外部 Skill 未加载" : "Some external skills were not loaded"}</div>
+              {skillsData.diagnostics.slice(0, 8).map((item, index) => (
+                <div key={`${item.path ?? "skill"}-${index}`} className="mt-1 break-all">
+                  {item.path ? `${item.path}: ` : ""}{item.message ?? (isZh ? "格式无效" : "Invalid format")}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-secondary/20 p-3">
+            <div>
+              <div className="text-sm font-semibold">{isZh ? "导入外部 Skill" : "Import external skill"}</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {isZh
+                  ? "兼容 AgentSkills / OpenClaw：选择包含 SKILL.md 的完整文件夹，静态参考资料会一并导入；脚本不会自动执行。"
+                  : "AgentSkills / OpenClaw compatible: select a complete folder containing SKILL.md. Static references are imported; scripts are never auto-executed."}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => skillFolderInputRef.current?.click()}
+              disabled={saving === "skill-import"}
+              className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-40"
+            >
+              <FolderUp size={16} />
+              {saving === "skill-import"
+                ? (isZh ? "导入中..." : "Importing...")
+                : (isZh ? "选择 Skill 文件夹" : "Choose skill folder")}
+            </button>
+            <input
+              ref={skillFolderInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+              onChange={(event) => {
+                void importSkillFolder(event.currentTarget.files);
+                event.currentTarget.value = "";
+              }}
+            />
+          </div>
           {skills.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">{isZh ? "还没有 Skill。" : "No skills yet."}</p>
           ) : (
@@ -362,18 +415,6 @@ export function ProjectSettings({ nav, theme, t }: { nav: Nav; theme: Theme; t: 
                 onChange={(e) => setSkillDraft((draft) => ({ ...draft, whenToUse: e.target.value }))}
                 placeholder={isZh ? "什么时候使用" : "When to use"}
                 className={`${fieldClass} md:col-span-2`}
-              />
-              <input
-                value={skillDraft.triggers}
-                onChange={(e) => setSkillDraft((draft) => ({ ...draft, triggers: e.target.value }))}
-                placeholder={isZh ? "触发词，用逗号分隔" : "Triggers, comma separated"}
-                className={fieldClass}
-              />
-              <input
-                value={skillDraft.sessionKinds}
-                onChange={(e) => setSkillDraft((draft) => ({ ...draft, sessionKinds: e.target.value }))}
-                placeholder="chat,book,short,play"
-                className={fieldClass}
               />
               <input
                 value={skillDraft.promptPacks}
