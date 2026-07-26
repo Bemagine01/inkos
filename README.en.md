@@ -58,7 +58,7 @@ InkOS 1.7 brings cross-language delivery, long-form forecasting, and continuous 
 v1.6.0 expands InkOS from open-world play into interactive-film authoring, scripts, storyboards, runtime skills, and traceable research:
 
 - **Interactive film/games**: create branching story graphs, choices, variables/flags, relationship state, endings, node images, and exportable interactive project packages.
-- **Runtime skills**: built-in and project-local skills can inject professional rules, prompt packs, and context needs. Chat can auto-select skills, or the user can force one with `@skill-id`.
+- **Runtime skills**: built-in and project-local skills can inject professional rules, prompt packs, and context needs. The Chat Agent can invoke a skill from the user's intent, or the user can force one with `@skill-id`.
 - **Traceable web research**: `research_web` creates sourced Markdown reports for worldbuilding, era/profession details, markets, and fact checks. Reports are references only and do not mutate canon or prose by themselves.
 - **Script and storyboard authoring**: Studio Chat can propose script, storyboard, and interactive-film creation actions, confirm them, then save artifacts that can be inspected in Studio.
 - **Reliability fixes**: targeted chapter edits can survive minor model paraphrases; failed multi-chapter audits no longer erase existing chapter indexes; model/provider switching keeps the active book binding.
@@ -131,9 +131,11 @@ Runtime skills are professional capability packs used by InkOS Chat / Play / lon
 How to use them:
 
 - Put `SKILL.md` files under `.inkos/skills/<skill-id>/` in a project. Studio Chat loads them at runtime.
+- Standard AgentSkills / OpenClaw locations are also supported: project `skills/` and `.agents/skills/`, plus `~/.agents/skills/` and `~/.openclaw/skills/`. Studio can import a complete folder containing `SKILL.md` and its static references.
 - Or set `INKOS_SKILL_DIRS=/abs/path/to/skills`; the path may point to one skill directory or a directory containing multiple skill subdirectories. Use the platform path delimiter for multiple paths.
 - Force one for a turn with `@skill-id`, for example: `@detective-play create an evidence-chain open world`.
-- Without `@skill-id`, InkOS can auto-select built-in skills from the session kind and trigger phrases, such as long-form writing, open-world play, or interactive film authoring.
+- Without `@skill-id`, the Chat Agent decides from the user's current intent whether to call `use_skill`. Session kinds, trigger phrases, and substring matching no longer activate skills.
+- External skills provide instructions and static references only. InkOS never auto-executes their scripts, and a skill cannot bypass existing tool permissions or confirmation gates.
 - Built-in prompt packs can be edited in **Project Settings → Prompt packs**. Project-level overrides are written to `prompt/<pack>/<prompt>.md`, for example `prompt/play/renderer.md` or `prompt/longform/writer.md`.
 
 Minimal `SKILL.md`:
@@ -144,8 +146,6 @@ id: detective-play
 name: Detective Play
 description: Detective evidence and suspect-board play.
 whenToUse: Use for open-world detective play and evidence ledgers.
-triggers: [detective, evidence]
-sessionKinds: [play]
 contextNeeds:
   - id: evidence-ledger
     purpose: Preserve suspect, clue, and evidence chain state.

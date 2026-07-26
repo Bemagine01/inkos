@@ -55,7 +55,7 @@ v1.7.0 keeps the v1.6 interactive-film and runtime-skill model, then adds comple
 - **Interactive-film projects**: Create playable branch graphs, variables/flags, relationship state, endings, node images, and exportable interactive project packages
 - **Scripts and storyboards**: Convert ideas, outlines, or prose into script/storyboard deliverables while preserving user format choices
 - **Long-document translation**: Translate EPUB, text-based PDF, TXT, or Markdown by chapter and semantic segment, maintain terminology, review source and target side by side, and export TXT/Markdown/EPUB
-- **Runtime skills**: Load built-in or project-local skills, allow Chat to auto-select them, or force a skill with `@skill-id`
+- **Runtime skills**: Load built-in, AgentSkills/OpenClaw, or project-local skills; let the Chat Agent invoke them from user intent, or force one with `@skill-id`
 - **Traceable web research**: Create sourced Markdown reports for facts, era/profession details, markets, and worldbuilding references
 - **Quality auditing**: Detect AI-generated content and perform 33-dimension quality checks
 - **Genre exploration**: Explore trends and create custom genre rules
@@ -466,6 +466,8 @@ Project-local skills live at:
 .inkos/skills/<skill-id>/SKILL.md
 ```
 
+InkOS also discovers standard AgentSkills / OpenClaw locations (`skills/`, `.agents/skills/`, `~/.agents/skills/`, and `~/.openclaw/skills/`). Studio can import a complete skill folder with its static reference files.
+
 External skill directories can be loaded with:
 
 ```bash
@@ -473,9 +475,10 @@ export INKOS_SKILL_DIRS=/abs/path/to/skills
 ```
 
 Guidelines for agent orchestration:
-- Let InkOS auto-select skills when the user gives a natural request such as "make this a detective evidence-chain open world".
+- Let the Chat Agent inspect the available skill catalog and call `use_skill` when the current user intent needs that expertise. Do not emulate this with session-kind routing, keyword lists, or substring matching.
 - Force a skill by including `@skill-id` in the user message when the user explicitly chooses one.
 - Treat skills as expertise packets: they can add rules, prompt packs, context needs, and retrieval guidance.
+- Skill folders may contain static references. Read them only when needed, and never auto-execute bundled scripts.
 - Do not treat skills as permissions. File edits, book creation, chapter writing, image generation, and exports still require the normal InkOS tools and confirmation gates.
 
 ### Workflow 19: Traceable Web Research
@@ -531,7 +534,7 @@ inkos translate export <project-id> --format epub
 - **Interactive-film workbench** — create and inspect branch nodes, variables/flags, endings, node images, and export packages
 - **Script / storyboard tools** — generate production-oriented script and storyboard files from ideas, prose, or reference notes
 - **Translation workbench** — import EPUB, text-based PDF, TXT, or Markdown; choose source and target languages; translate, compare, review, and export complete projects
-- **Runtime Skill management** — list built-in skills, add project-local skills, edit `.inkos/skills/<id>/SKILL.md`, and force skills from Chat
+- **Runtime Skill management** — list built-in/external skills, import AgentSkills/OpenClaw folders with static references, edit `.inkos/skills/<id>/SKILL.md`, let Chat invoke skills from intent, and force skills from Chat
 - **Research search provider** — configure external web search API credentials for `research_web`
 - **Chapter review & editing** — approve/reject drafts, edit content inline, multi-mode revision (polish/spot-fix/rewrite/anti-detect)
 - **Real-time writing progress** — SSE-based live updates during chapter generation
