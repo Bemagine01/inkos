@@ -66,7 +66,7 @@ export function createUseSkillTool(
       return textResult(
         [
           `Skill activated: ${skill.id}`,
-          `Purpose: ${skill.whenToUse}`,
+          `Purpose: ${skill.description}`,
           "",
           skill.body.trim() || skill.description,
           ...(resource

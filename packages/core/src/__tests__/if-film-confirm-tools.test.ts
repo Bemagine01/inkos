@@ -37,7 +37,7 @@ describe("confirm-class authoring tools", () => {
 
     expect(systemPrompt).toContain("Prompt Pack Guidance");
     expect(systemPrompt).toContain("PROJECT STORY GRAPH OVERRIDE");
-    expect((result.details as any).usedSkills).toContain("interactive-film-authoring");
+    expect(result.details).not.toHaveProperty("usedSkills");
     expect((result.details as any).promptPacks).toContain("interactive-film.story-graph");
   });
 

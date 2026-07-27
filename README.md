@@ -65,7 +65,7 @@ InkOS 1.7 把跨语言交付、长篇推演和持续协作汇入同一套 Agent 
 InkOS 1.6.0 把开放世界继续推进到互动影游、剧本和分镜工作台，同时引入可插拔 Skill 系统：专业能力可以由 Chat Agent 按用户意图调用，也可以由用户强制指定。写作、互动、研究和导出继续共享同一套 action surface，重动作确认后再执行，产物可以在 Studio 内查看和导出。
 
 - **互动影游**：新增分支剧情、变量 / 旗标、角色关系、结局、节点图片和交互项目导出，适合做互动剧、互动影游和多结局脚本。
-- **Skill 系统**：支持内置 / 外部 skill，为长篇、短篇、Play、剧本、分镜等入口注入专业规则、提示词包和上下文需求。
+- **Agent Skills**：直接兼容标准 `SKILL.md` 专业能力包；Chat Agent 可按用户意图调用，用户也可用 `@skill-id` 强制指定。Skill 只提供专业指导和静态参考资料，不再绑定 InkOS 私有字段、提示词包或上下文规划器。
 - **联网研究**：新增 `research_web`，用于世界观、职业、年代、市场和事实核查，生成带来源、查询记录和可信度的 Markdown 参考报告。
 - **协作编辑稳定性**：局部章节编辑、章节索引恢复、多渠道模型切换后的 bookId 传递都补了回归保护。
 
@@ -137,35 +137,26 @@ inkos interact --json --message "继续当前书，但把节奏再收紧一点"
 
 `plan chapter` / `compose chapter` / `draft` / `audit` / `revise` / `write next` 这些原子命令仍然保留，但更适合作为底层工具，而不是 OpenClaw 的首选入口。也可以在 [ClawHub](https://clawhub.ai) 搜索 `inkos` 在线查看。
 
-### InkOS 运行时 Skill
+### Agent Skills
 
-这里的 skill 指 InkOS Chat/Play/长篇写作内部可使用的专业能力包，和上面的 ClawHub Skill 不是同一个概念。它不会给模型额外执行权限，只提供专业规则、上下文需求和 prompt pack；创建、写入、编辑、生成图片仍然走 Studio 的工具权限和确认闸门。
+InkOS 直接使用标准 `SKILL.md` 作为专业能力扩展，不再维护一套 InkOS 私有 Skill 协议。Skill 只向 Chat Agent 提供专业说明和静态参考资料，不会增加执行权限；创建、写入、编辑和生成图片仍然由 InkOS 工具与确认闸门控制。
 
 可用方式：
 
-- 在项目目录放置 `.inkos/skills/<skill-id>/SKILL.md`，Studio Chat 会在运行时自动加载。
-- 也兼容 AgentSkills / OpenClaw 的标准目录：项目 `skills/`、`.agents/skills/`，以及用户目录 `~/.agents/skills/`、`~/.openclaw/skills/`。还可以在 Studio 的 Skill 面板直接导入包含 `SKILL.md` 的完整文件夹和静态参考资料。
+- 放到标准目录：项目 `skills/`、`.agents/skills/`，或用户目录 `~/.agents/skills/`、`~/.openclaw/skills/`。Studio 也可以导入包含 `SKILL.md` 的完整文件夹和静态参考资料；项目导入统一保存到 `.agents/skills/`。
 - 或设置 `INKOS_SKILL_DIRS=/abs/path/to/skills`，可指向单个 skill 目录，也可指向包含多个 skill 子目录的目录。多个目录按系统分隔符分隔。
 - 在 Chat 里用 `@skill-id` 强制本轮使用，例如：`@detective-play 做一个证据链驱动的开放世界`。
 - 不写 `@skill-id` 时，Chat Agent 根据用户当前意图决定是否调用 `use_skill`；不再通过 session 类型、关键词或字符串包含匹配机械启用。
 - 外部 Skill 只提供指令和静态参考资料，InkOS 不会自动执行其中的脚本；它也不会绕过现有工具权限与确认闸门。
-- 在 Studio 的 **项目设置 → 提示词** 可以编辑内置 prompt pack；项目级覆盖文件会写到 `prompt/<pack>/<prompt>.md`，例如 `prompt/play/renderer.md`、`prompt/longform/writer.md`。
+
+提示词配置不是 Skill。Studio 的 **项目设置 → 提示词** 单独管理 prompt packs，项目级覆盖文件写入 `prompt/<pack>/<prompt>.md`，例如 `prompt/play/renderer.md`、`prompt/longform/writer.md`。
 
 最小 `SKILL.md` 示例：
 
 ```md
 ---
-id: detective-play
 name: Detective Play
 description: Detective evidence and suspect-board play.
-whenToUse: Use for open-world detective play and evidence ledgers.
-contextNeeds:
-  - id: evidence-ledger
-    purpose: Preserve suspect, clue, and evidence chain state.
-    sources: [world/evidence.md]
-    tier: protected
-    appliesTo: [play_step]
-    retrieval: semantic
 ---
 Use evidence chains; do not turn clues into generic atmosphere.
 ```

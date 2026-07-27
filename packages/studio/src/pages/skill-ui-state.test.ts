@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  createEmptySkillDraft,
   serializeSkillFolder,
   selectedSkillIdsForSend,
-  skillDraftToPayload,
   toggleSelectedSkillIds,
 } from "./skill-ui-state";
 
@@ -27,40 +25,6 @@ describe("skill-ui-state", () => {
       "open-world-play",
       "script",
     ]);
-  });
-
-  it("serializes skill form values for the API", () => {
-    const draft = {
-      ...createEmptySkillDraft(),
-      id: "Romance Play",
-      name: "恋爱互动",
-      description: "恋爱本协作",
-      whenToUse: "用户要玩恋爱互动世界时",
-      promptPacks: "play.renderer, play.image",
-      body: "保持细腻对话。",
-    };
-
-    expect(skillDraftToPayload(draft)).toEqual({
-      id: "romance-play",
-      name: "恋爱互动",
-      description: "恋爱本协作",
-      whenToUse: "用户要玩恋爱互动世界时",
-      promptPacks: ["play.renderer", "play.image"],
-      body: "保持细腻对话。",
-    });
-  });
-
-  it("prefixes manually created ids that begin with a number", () => {
-    const draft = {
-      ...createEmptySkillDraft(),
-      id: "3D Scene Writer",
-      name: "3D Scene Writer",
-      description: "Spatial scene guidance.",
-      whenToUse: "Use for spatial scenes.",
-      body: "Keep spatial continuity visible.",
-    };
-
-    expect(skillDraftToPayload(draft).id).toBe("skill-3d-scene-writer");
   });
 
   it("rejects oversized skill folders before reading file contents", async () => {

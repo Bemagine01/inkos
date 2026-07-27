@@ -2,32 +2,10 @@ export interface StudioSkill {
   readonly id: string;
   readonly name: string;
   readonly description?: string;
-  readonly whenToUse?: string;
-  readonly promptPacks?: ReadonlyArray<string>;
-  readonly toolHints?: ReadonlyArray<string>;
-  readonly contextNeeds?: ReadonlyArray<string>;
   readonly body?: string;
   readonly source?: string;
   readonly editable?: boolean;
   readonly path?: string;
-}
-
-export interface SkillDraft {
-  readonly id: string;
-  readonly name: string;
-  readonly description: string;
-  readonly whenToUse: string;
-  readonly promptPacks: string;
-  readonly body: string;
-}
-
-export interface SkillPayload {
-  readonly id?: string;
-  readonly name?: string;
-  readonly description?: string;
-  readonly whenToUse?: string;
-  readonly promptPacks?: string[];
-  readonly body?: string;
 }
 
 export interface SkillImportFilePayload {
@@ -39,33 +17,10 @@ const MAX_SKILL_IMPORT_FILES = 128;
 const MAX_SKILL_IMPORT_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_SKILL_IMPORT_TOTAL_BYTES = 8 * 1024 * 1024;
 
-export function createEmptySkillDraft(): SkillDraft {
-  return {
-    id: "",
-    name: "",
-    description: "",
-    whenToUse: "",
-    promptPacks: "",
-    body: "",
-  };
-}
-
 export function normalizeSkillId(value: string): string {
   const id = value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
   if (!id) return "";
   return /^[a-z]/.test(id) ? id : `skill-${id}`;
-}
-
-export function splitSkillList(value: string): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const part of value.split(/[,，\n]/)) {
-    const item = part.trim();
-    if (!item || seen.has(item)) continue;
-    seen.add(item);
-    out.push(item);
-  }
-  return out;
 }
 
 export function toggleSelectedSkillIds(selected: ReadonlyArray<string>, skillId: string): string[] {
@@ -78,29 +33,6 @@ export function toggleSelectedSkillIds(selected: ReadonlyArray<string>, skillId:
 export function selectedSkillIdsForSend(selected: ReadonlyArray<string>): string[] | undefined {
   const ids = Array.from(new Set(selected.map(normalizeSkillId).filter(Boolean)));
   return ids.length > 0 ? ids : undefined;
-}
-
-export function skillDraftFromSkill(skill: StudioSkill): SkillDraft {
-  return {
-    id: skill.id,
-    name: skill.name,
-    description: skill.description ?? "",
-    whenToUse: skill.whenToUse ?? "",
-    promptPacks: (skill.promptPacks ?? []).join(", "),
-    body: skill.body ?? "",
-  };
-}
-
-export function skillDraftToPayload(draft: SkillDraft, includeId = true): SkillPayload {
-  const id = normalizeSkillId(draft.id);
-  return {
-    ...(includeId && id ? { id } : {}),
-    name: draft.name.trim() || id,
-    description: draft.description.trim(),
-    whenToUse: draft.whenToUse.trim(),
-    promptPacks: splitSkillList(draft.promptPacks),
-    body: draft.body.trim(),
-  };
 }
 
 export async function serializeSkillFolder(files: FileList | ReadonlyArray<File>): Promise<SkillImportFilePayload[]> {

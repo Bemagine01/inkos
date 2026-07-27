@@ -221,6 +221,27 @@ import {
 import { restoreAgentMessagesFromTranscript } from "../interaction/session-transcript-restore.js";
 import { PlayStore } from "../play/play-store.js";
 
+async function writeProjectAgentSkill(
+  projectRoot: string,
+  id: string,
+  description: string,
+  body: string,
+): Promise<void> {
+  const skillDir = join(projectRoot, ".agents", "skills", id);
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(
+    join(skillDir, "SKILL.md"),
+    [
+      "---",
+      `name: ${id}`,
+      `description: ${description}`,
+      "---",
+      body,
+    ].join("\n"),
+    "utf-8",
+  );
+}
+
 describe("runAgentSession cache — bookId switch", () => {
   let projectRoot: string;
   let otherProjectRoot: string | null;
@@ -629,6 +650,12 @@ describe("runAgentSession cache — bookId switch", () => {
   it("exposes intent-selected skills only on free-text turns", async () => {
     const model = { provider: "x", id: "y", api: "anthropic-messages" } as any;
     const pipeline = {} as any;
+    await writeProjectAgentSkill(
+      projectRoot,
+      "longform-writing",
+      "Use for professional long-form story planning.",
+      "Preserve the user's durable story intent.",
+    );
 
     await runAgentSession(
       {
@@ -669,6 +696,12 @@ describe("runAgentSession cache — bookId switch", () => {
   it("uses an explicitly requested skill without also exposing autonomous skill selection", async () => {
     const model = { provider: "x", id: "y", api: "anthropic-messages" } as any;
     const pipeline = {} as any;
+    await writeProjectAgentSkill(
+      projectRoot,
+      "open-world-play",
+      "Use for open-world interactive fiction.",
+      "Preserve world state and player agency.",
+    );
 
     await runAgentSession(
       {
@@ -690,18 +723,11 @@ describe("runAgentSession cache — bookId switch", () => {
   });
 
   it("expires intent-selected skill instructions before the next turn and transcript restore", async () => {
-    const skillDir = join(projectRoot, ".inkos", "skills", "specialist-skill");
-    await mkdir(skillDir, { recursive: true });
-    await writeFile(
-      join(skillDir, "SKILL.md"),
-      [
-        "---",
-        "name: specialist-skill",
-        "description: Use for a narrow specialist request.",
-        "---",
-        "TURN_ONLY_SECRET_GUIDANCE",
-      ].join("\n"),
-      "utf-8",
+    await writeProjectAgentSkill(
+      projectRoot,
+      "specialist-skill",
+      "Use for a narrow specialist request.",
+      "TURN_ONLY_SECRET_GUIDANCE",
     );
     const model = { provider: "x", id: "y", api: "anthropic-messages" } as any;
     const pipeline = {} as any;

@@ -69,9 +69,8 @@ import {
   normalizeSkillIdList as normalizeCoreSkillIdList,
   inferLanguage,
   createSkillRegistry,
-  loadConfiguredCapabilitySkills,
-  parseCapabilitySkillDocument,
-  CapabilitySkillManifestSchema,
+  loadConfiguredAgentSkills,
+  parseAgentSkillDocument,
   getBuiltinPrompt,
   listBuiltinPromptPacks,
   listBuiltinPrompts,
@@ -80,8 +79,8 @@ import {
   toPosixPath,
   type ActionPayload,
   type ActionSource,
+  type AgentSkill,
   type BuiltinPrompt,
-  type CapabilitySkillManifest,
   createGenerateCoverTool,
   createInteractiveFilmCreationTool,
   createPlayStartTool,
@@ -747,7 +746,7 @@ async function storeTranslationUpload(
 }
 
 function projectSkillsDir(root: string): string {
-  return join(root, ".inkos", "skills");
+  return join(root, ".agents", "skills");
 }
 
 function projectSkillDir(root: string, id: string): string {
@@ -758,76 +757,18 @@ function projectSkillPath(root: string, id: string): string {
   return join(projectSkillDir(root, id), "SKILL.md");
 }
 
-function toStudioSkill(skill: CapabilitySkillManifest, root: string, projectSkillIds: ReadonlySet<string>) {
+function toStudioSkill(skill: AgentSkill, root: string, projectSkillIds: ReadonlySet<string>) {
   const projectPath = projectSkillPath(root, skill.id);
   const isProjectFile = projectSkillIds.has(skill.id);
   return {
     id: skill.id,
     name: skill.name,
     description: skill.description,
-    whenToUse: skill.whenToUse,
-    promptPacks: skill.promptPacks,
-    toolHints: skill.toolHints,
-    contextNeeds: skill.contextNeeds,
     body: skill.body,
     source: isProjectFile ? "project" : skill.source,
     editable: isProjectFile,
     path: isProjectFile ? relative(root, projectPath) : undefined,
   };
-}
-
-function normalizeSkillPayload(value: unknown, idOverride?: string): CapabilitySkillManifest {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new ApiError(400, "INVALID_SKILL_PAYLOAD", "Skill payload must be an object");
-  }
-  const data = value as Record<string, unknown>;
-  const id = normalizeStudioSkillId(idOverride ?? data.id, "id");
-  const textOr = (field: string, fallback: string): string => {
-    const raw = data[field];
-    return typeof raw === "string" && raw.trim() ? raw.trim() : fallback;
-  };
-  const stringList = (field: string): string[] => (
-    Array.isArray(data[field])
-      ? data[field]
-          .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-          .map((item) => item.trim())
-      : []
-  );
-  try {
-    return CapabilitySkillManifestSchema.parse({
-      id,
-      name: textOr("name", id),
-      description: textOr("description", "Project runtime skill."),
-      whenToUse: textOr("whenToUse", "Use when explicitly selected by the user."),
-      promptPacks: stringList("promptPacks"),
-      toolHints: stringList("toolHints"),
-      contextNeeds: Array.isArray(data.contextNeeds) ? data.contextNeeds : [],
-      body: typeof data.body === "string" ? data.body : "",
-      source: "project",
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new ApiError(400, "INVALID_SKILL_PAYLOAD", message);
-  }
-}
-
-function serializeProjectSkill(skill: CapabilitySkillManifest): string {
-  const frontmatter = {
-    id: skill.id,
-    name: skill.name,
-    description: skill.description,
-    whenToUse: skill.whenToUse,
-    promptPacks: skill.promptPacks,
-    toolHints: skill.toolHints,
-    contextNeeds: skill.contextNeeds,
-  };
-  return [
-    "---",
-    ...Object.entries(frontmatter).map(([key, value]) => `${key}: ${JSON.stringify(value)}`),
-    "---",
-    skill.body.trim(),
-    "",
-  ].join("\n");
 }
 
 interface StudioSkillImportFile {
@@ -913,16 +854,16 @@ function normalizeSkillImportFiles(value: unknown): {
 async function importStudioSkillFolder(
   root: string,
   payload: unknown,
-): Promise<CapabilitySkillManifest> {
+): Promise<AgentSkill> {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new ApiError(400, "INVALID_SKILL_IMPORT", "Skill import payload must be an object");
   }
   const record = payload as Record<string, unknown>;
   const { files, manifestPath } = normalizeSkillImportFiles(record.files);
   const manifest = files.find((file) => file.path === manifestPath)!;
-  let parsed: CapabilitySkillManifest;
+  let parsed: AgentSkill;
   try {
-    parsed = parseCapabilitySkillDocument(manifest.buffer.toString("utf-8"), {
+    parsed = parseAgentSkillDocument(manifest.buffer.toString("utf-8"), {
       skillPath: join(root, manifestPath),
       source: "project",
     });
@@ -965,7 +906,7 @@ async function importStudioSkillFolder(
 }
 
 async function loadStudioSkills(root: string) {
-  const configured = await loadConfiguredCapabilitySkills({ projectRoot: root });
+  const configured = await loadConfiguredAgentSkills({ projectRoot: root });
   const projectSkillIds = await listProjectSkillIds(root);
   const registry = createSkillRegistry({ skills: configured.skills });
   return {
@@ -4002,32 +3943,11 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
     return c.json({ prompt: await toStudioPromptPackPrompt(root, prompt!) });
   });
 
-  app.post("/api/v1/skills", async (c) => {
-    const payload = await c.req.json().catch(() => {
-      throw new ApiError(400, "INVALID_SKILL_PAYLOAD", "Skill payload must be JSON");
-    });
-    const skill = normalizeSkillPayload(payload);
-    await mkdir(projectSkillDir(root, skill.id), { recursive: true });
-    await writeFile(projectSkillPath(root, skill.id), serializeProjectSkill(skill), "utf-8");
-    return c.json({ skill: toStudioSkill(skill, root, new Set([skill.id])) });
-  });
-
   app.post("/api/v1/skills/import", async (c) => {
     const payload = await c.req.json().catch(() => {
       throw new ApiError(400, "INVALID_SKILL_IMPORT", "Skill import payload must be JSON");
     });
     const skill = await importStudioSkillFolder(root, payload);
-    return c.json({ skill: toStudioSkill(skill, root, new Set([skill.id])) });
-  });
-
-  app.put("/api/v1/skills/:skillId", async (c) => {
-    const id = normalizeStudioSkillId(c.req.param("skillId"), "skillId");
-    const payload = await c.req.json().catch(() => {
-      throw new ApiError(400, "INVALID_SKILL_PAYLOAD", "Skill payload must be JSON");
-    });
-    const skill = normalizeSkillPayload(payload, id);
-    await mkdir(projectSkillDir(root, skill.id), { recursive: true });
-    await writeFile(projectSkillPath(root, skill.id), serializeProjectSkill(skill), "utf-8");
     return c.json({ skill: toStudioSkill(skill, root, new Set([skill.id])) });
   });
 

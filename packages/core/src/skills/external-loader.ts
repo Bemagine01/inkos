@@ -3,16 +3,17 @@ import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
 import yaml from "js-yaml";
 import {
-  CapabilitySkillManifestSchema,
-  type CapabilitySkillManifest,
+  AgentSkillSchema,
+  type AgentSkill,
 } from "./types.js";
 
 const MAX_SKILL_MANIFEST_BYTES = 2 * 1024 * 1024;
 const MAX_SKILL_NAME_CHARS = 64;
 const MAX_SKILL_DESCRIPTION_CHARS = 1024;
 
-export interface LoadExternalCapabilitySkillsInput {
+export interface LoadExternalAgentSkillsInput {
   readonly externalDirs: ReadonlyArray<string>;
+  readonly source?: AgentSkill["source"];
 }
 
 export interface ExternalSkillDiagnostic {
@@ -20,33 +21,33 @@ export interface ExternalSkillDiagnostic {
   readonly message: string;
 }
 
-export interface LoadExternalCapabilitySkillsResult {
-  readonly skills: ReadonlyArray<CapabilitySkillManifest>;
+export interface LoadExternalAgentSkillsResult {
+  readonly skills: ReadonlyArray<AgentSkill>;
   readonly diagnostics: ReadonlyArray<ExternalSkillDiagnostic>;
 }
 
-export interface LoadConfiguredCapabilitySkillsInput {
+export interface LoadConfiguredAgentSkillsInput {
   readonly projectRoot: string;
   readonly env?: NodeJS.ProcessEnv | Record<string, string | undefined>;
-  readonly userRoot?: string;
+  readonly homeDir?: string;
 }
 
-export interface ParseCapabilitySkillDocumentOptions {
+export interface ParseAgentSkillDocumentOptions {
   readonly skillPath: string;
-  readonly source?: CapabilitySkillManifest["source"];
+  readonly source?: AgentSkill["source"];
 }
 
-export async function loadExternalCapabilitySkills(
-  input: LoadExternalCapabilitySkillsInput,
-): Promise<LoadExternalCapabilitySkillsResult> {
+export async function loadExternalAgentSkills(
+  input: LoadExternalAgentSkillsInput,
+): Promise<LoadExternalAgentSkillsResult> {
   const skillDirs = await discoverSkillDirs(input.externalDirs);
-  const skills: CapabilitySkillManifest[] = [];
+  const skills: AgentSkill[] = [];
   const diagnostics: ExternalSkillDiagnostic[] = [];
 
   for (const dir of skillDirs) {
     const skillPath = join(dir, "SKILL.md");
     try {
-      skills.push(await loadSkillManifest(skillPath));
+      skills.push(await loadSkillManifest(skillPath, input.source));
     } catch (error) {
       diagnostics.push({
         path: skillPath,
@@ -58,16 +59,19 @@ export async function loadExternalCapabilitySkills(
   return { skills, diagnostics };
 }
 
-export async function loadConfiguredCapabilitySkills(
-  input: LoadConfiguredCapabilitySkillsInput,
-): Promise<LoadExternalCapabilitySkillsResult> {
+export async function loadConfiguredAgentSkills(
+  input: LoadConfiguredAgentSkillsInput,
+): Promise<LoadExternalAgentSkillsResult> {
   const candidates = configuredSkillDirs(input);
-  const skills: CapabilitySkillManifest[] = [];
+  const skills: AgentSkill[] = [];
   const diagnostics: ExternalSkillDiagnostic[] = [];
 
   for (const candidate of candidates) {
     try {
-      const result = await loadExternalCapabilitySkills({ externalDirs: [candidate.path] });
+      const result = await loadExternalAgentSkills({
+        externalDirs: [candidate.path],
+        source: candidate.source,
+      });
       skills.push(...result.skills);
       diagnostics.push(...result.diagnostics);
     } catch (error) {
@@ -85,24 +89,22 @@ export async function loadConfiguredCapabilitySkills(
 interface ConfiguredSkillDir {
   readonly path: string;
   readonly explicit: boolean;
+  readonly source: AgentSkill["source"];
 }
 
-function configuredSkillDirs(input: LoadConfiguredCapabilitySkillsInput): ConfiguredSkillDir[] {
+function configuredSkillDirs(input: LoadConfiguredAgentSkillsInput): ConfiguredSkillDir[] {
   const env = input.env ?? process.env;
   const envDirs = (env.INKOS_SKILL_DIRS ?? "")
     .split(delimiter)
     .map((value) => value.trim())
     .filter(Boolean);
-  const userRoot = input.userRoot ?? join(homedir(), ".inkos");
-  const homeRoot = dirname(userRoot);
+  const homeDir = input.homeDir ?? homedir();
   return [
-    ...envDirs.map((path) => ({ path, explicit: true })),
-    { path: join(homeRoot, ".openclaw", "skills"), explicit: false },
-    { path: join(homeRoot, ".agents", "skills"), explicit: false },
-    { path: join(userRoot, "skills"), explicit: false },
-    { path: join(input.projectRoot, ".agents", "skills"), explicit: false },
-    { path: join(input.projectRoot, "skills"), explicit: false },
-    { path: join(input.projectRoot, ".inkos", "skills"), explicit: false },
+    ...envDirs.map((path) => ({ path, explicit: true, source: "external" as const })),
+    { path: join(homeDir, ".openclaw", "skills"), explicit: false, source: "user" },
+    { path: join(homeDir, ".agents", "skills"), explicit: false, source: "user" },
+    { path: join(input.projectRoot, ".agents", "skills"), explicit: false, source: "project" },
+    { path: join(input.projectRoot, "skills"), explicit: false, source: "project" },
   ];
 }
 
@@ -157,19 +159,22 @@ async function hasSkillManifest(dir: string): Promise<boolean> {
   }
 }
 
-async function loadSkillManifest(skillPath: string): Promise<CapabilitySkillManifest> {
+async function loadSkillManifest(
+  skillPath: string,
+  source: AgentSkill["source"] = "external",
+): Promise<AgentSkill> {
   const info = await stat(skillPath);
   if (info.size > MAX_SKILL_MANIFEST_BYTES) {
     throw new Error(`SKILL.md exceeds ${MAX_SKILL_MANIFEST_BYTES} bytes.`);
   }
   const raw = await readFile(skillPath, "utf-8");
-  return parseCapabilitySkillDocument(raw, { skillPath });
+  return parseAgentSkillDocument(raw, { skillPath, source });
 }
 
-export function parseCapabilitySkillDocument(
+export function parseAgentSkillDocument(
   raw: string,
-  options: ParseCapabilitySkillDocumentOptions,
-): CapabilitySkillManifest {
+  options: ParseAgentSkillDocumentOptions,
+): AgentSkill {
   const parsed = parseFrontmatter(raw);
   if (!parsed.data || typeof parsed.data !== "object" || Array.isArray(parsed.data)) {
     throw new Error("SKILL.md frontmatter must be a YAML object.");
@@ -182,23 +187,11 @@ export function parseCapabilitySkillDocument(
     "description",
     MAX_SKILL_DESCRIPTION_CHARS,
   );
-  const id = normalizeExternalSkillId(
-    optionalText(data.id) ?? name,
-    fallbackId,
-  );
-  const whenToUse = boundedOptionalText(data.whenToUse, "whenToUse", MAX_SKILL_DESCRIPTION_CHARS)
-    ?? optionalText(data["when-to-use"])
-    ?? optionalText(data.when_to_use)
-    ?? description;
-  if (whenToUse.length > MAX_SKILL_DESCRIPTION_CHARS) {
-    throw new Error(`SKILL.md frontmatter whenToUse must be at most ${MAX_SKILL_DESCRIPTION_CHARS} characters.`);
-  }
-  return CapabilitySkillManifestSchema.parse({
-    ...data,
+  const id = normalizeExternalSkillId(name, fallbackId);
+  return AgentSkillSchema.parse({
     id,
     name,
     description,
-    whenToUse,
     body: parsed.body.trim(),
     source: options.source ?? "external",
     baseDir: dirname(options.skillPath),
@@ -230,14 +223,6 @@ function requiredText(value: unknown, field: string, maxChars?: number): string 
   const text = optionalText(value);
   if (!text) throw new Error(`SKILL.md frontmatter requires ${field}.`);
   if (maxChars !== undefined && text.length > maxChars) {
-    throw new Error(`SKILL.md frontmatter ${field} must be at most ${maxChars} characters.`);
-  }
-  return text;
-}
-
-function boundedOptionalText(value: unknown, field: string, maxChars: number): string | undefined {
-  const text = optionalText(value);
-  if (text && text.length > maxChars) {
     throw new Error(`SKILL.md frontmatter ${field} must be at most ${maxChars} characters.`);
   }
   return text;

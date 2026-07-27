@@ -6,7 +6,7 @@ import {
   getBuiltinPrompt,
   loadPromptPackPrompt,
   promptOverridePath,
-} from "../skills/index.js";
+} from "../prompts/index.js";
 
 async function tempProject(): Promise<string> {
   return await mkdtemp(join(tmpdir(), "inkos-prompt-pack-"));

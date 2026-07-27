@@ -18,7 +18,7 @@ import { writeCharacterFacts } from "../interactive-film/memory-link.js";
 import { MemoryDB } from "../state/memory-db.js";
 import { join } from "node:path";
 import { generateNodeImage, defaultNodeImageDeps, type NodeImageDeps } from "../interactive-film/node-image.js";
-import { appendPromptPackGuidance } from "../skills/prompt-pack.js";
+import { appendPromptPackGuidance } from "../prompts/prompt-pack.js";
 
 // ---------------------------------------------------------------------------
 // Local helper — textResult is not exported from agent-tools.ts
@@ -194,13 +194,10 @@ function nodeSystemPrompt(language: FilmAuthoringLanguage): string {
   return language === "en" ? NODE_SYSTEM_EN : NODE_SYSTEM_ZH;
 }
 
-const INTERACTIVE_FILM_AUTHORING_SKILL = "interactive-film-authoring";
-
 function graphUpdatedDetails(rev: number, promptId: string, extra: Record<string, unknown> = {}) {
   return {
     kind: "graph_updated" as const,
     rev,
-    usedSkills: [INTERACTIVE_FILM_AUTHORING_SKILL],
     promptPacks: [promptId],
     ...extra,
   };

@@ -74,8 +74,7 @@ function appendSkillGuidance(
 ): string {
   if (!skills) return prompt;
   const skillLines = skills.usedSkills.flatMap((skill) => {
-    const packs = skill.promptPacks.length > 0 ? `; promptPacks=${skill.promptPacks.join(", ")}` : "";
-    const line = `- ${skill.id} (${isZh ? "强制" : "forced"}): ${skill.whenToUse}${packs}`;
+    const line = `- ${skill.id} (${isZh ? "强制" : "forced"}): ${skill.description}`;
     const body = skill.body.trim();
     if (!body) return [line];
     return [
@@ -122,7 +121,7 @@ function appendSkillGuidance(
         "## Skill 指导",
         "",
         "强制 Skill 是用户/界面明确要求的专业能力，除非不可用或违反安全/权限边界，否则必须按它的领域规则组织回答和工具提案。",
-        "Skill 只提供专业指导、上下文需求和 prompt pack；它不授予执行权限。创建、写入、编辑、生成图片等副作用仍必须通过当前 session 允许的工具和确认闸门。",
+        "Skill 只提供专业指导和静态参考资料；它不授予执行权限。创建、写入、编辑、生成图片等副作用仍必须通过当前 session 允许的工具和确认闸门。",
         ...skillLines,
         catalog,
         unavailable.trim(),
@@ -132,7 +131,7 @@ function appendSkillGuidance(
         "## Skill Guidance",
         "",
         "Available professional skills for this turn are listed below. Forced skills were explicitly requested by the user or UI; follow their domain guidance unless unavailable or unsafe.",
-        "Skills provide guidance, context needs, and prompt packs only. They do not grant execution permission. Side effects still require the current session's allowed tools and confirmation gates.",
+        "Skills provide professional guidance and static references only. They do not grant execution permission. Side effects still require the current session's allowed tools and confirmation gates.",
         ...skillLines,
         catalog,
         unavailable.trim(),

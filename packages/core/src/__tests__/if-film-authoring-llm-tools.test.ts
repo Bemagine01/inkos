@@ -40,7 +40,7 @@ describe("fill_node tool (stubbed LLM)", () => {
 
     expect(systemPrompt).toContain("Prompt Pack Guidance");
     expect(systemPrompt).toContain("PROJECT SCRIPT OVERRIDE");
-    expect((result.details as any).usedSkills).toContain("interactive-film-authoring");
+    expect(result.details).not.toHaveProperty("usedSkills");
     expect((result.details as any).promptPacks).toContain("interactive-film.script");
   });
 });

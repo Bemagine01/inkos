@@ -63,7 +63,7 @@ import type { TranscriptEvent, TranscriptRole } from "../interaction/session-tra
 import type { PlayMode, SessionKind } from "../interaction/session.js";
 import type { ActionPayload, ActionSource, RequestedIntent } from "../interaction/action-envelope.js";
 import type { ContextCompressionCallback } from "../models/context-compression.js";
-import { createSkillRegistry, loadConfiguredCapabilitySkills } from "../skills/index.js";
+import { createSkillRegistry, loadConfiguredAgentSkills } from "../skills/index.js";
 import { assertSafeBookId } from "../utils/book-id.js";
 import { PlayStore } from "../play/play-store.js";
 import { isLlmStubEnabled, stubAgentStream } from "./llm-stub.js";
@@ -92,9 +92,9 @@ export interface AgentSessionConfig {
   requestedIntent?: RequestedIntent;
   /** Structured execution arguments confirmed by the UI/command surface. */
   actionPayload?: ActionPayload;
-  /** User/UI-forced capability skills for this turn, e.g. @open-world-play. */
+  /** User/UI-forced Agent Skills for this turn, e.g. @open-world-play. */
   requestedSkills?: ReadonlyArray<string>;
-  /** Capability skills explicitly disabled for this turn. */
+  /** Agent Skills explicitly disabled for this turn. */
   disabledSkills?: ReadonlyArray<string>;
   /** Language for the system prompt. */
   language: string;
@@ -262,8 +262,6 @@ function skillResolutionCacheKey(value: {
   readonly usedSkills: ReadonlyArray<{
     readonly id: string;
     readonly source?: string;
-    readonly whenToUse?: string;
-    readonly promptPacks?: ReadonlyArray<string>;
     readonly body?: string;
   }>;
   readonly forcedSkillIds: ReadonlyArray<string>;
@@ -273,7 +271,6 @@ function skillResolutionCacheKey(value: {
     readonly id: string;
     readonly name: string;
     readonly description: string;
-    readonly whenToUse: string;
     readonly body?: string;
     readonly baseDir?: string;
   }>;
@@ -282,8 +279,6 @@ function skillResolutionCacheKey(value: {
     used: value.usedSkills.map((skill) => ({
       id: skill.id,
       source: skill.source,
-      whenToUse: skill.whenToUse,
-      promptPacks: skill.promptPacks ?? [],
       body: skill.body ?? "",
     })),
     forced: value.forcedSkillIds,
@@ -293,7 +288,6 @@ function skillResolutionCacheKey(value: {
       id: skill.id,
       name: skill.name,
       description: skill.description,
-      whenToUse: skill.whenToUse,
       body: skill.body ?? "",
       baseDir: skill.baseDir ?? "",
     })),
@@ -1001,7 +995,7 @@ async function runAgentSessionUnlocked(
   const requestedIntent = config.requestedIntent;
   const actionPayload = config.actionPayload;
   const actionPayloadKey = actionPayloadCacheKey(actionPayload);
-  const configuredSkills = await loadConfiguredCapabilitySkills({ projectRoot });
+  const configuredSkills = await loadConfiguredAgentSkills({ projectRoot });
   const skillRegistry = createSkillRegistry({ skills: configuredSkills.skills });
   const skillResolution = skillRegistry.resolveSkills({
     requestedSkills: config.requestedSkills,

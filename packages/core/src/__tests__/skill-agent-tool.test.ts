@@ -24,10 +24,6 @@ describe("use_skill agent tool", () => {
         id: "writer-distillation",
         name: "Writer Distillation",
         description: "Distill a writer's transferable craft.",
-        whenToUse: "Use when the user asks to analyze or imitate a writer's style.",
-        promptPacks: [],
-        toolHints: [],
-        contextNeeds: [],
         body: "Separate transferable craft from surface wording.",
         source: "external",
         baseDir,
@@ -63,10 +59,6 @@ describe("use_skill agent tool", () => {
         id: "writer-distillation",
         name: "Writer Distillation",
         description: "Distill writer craft.",
-        whenToUse: "Use for style analysis.",
-        promptPacks: [],
-        toolHints: [],
-        contextNeeds: [],
         body: "Read references/rubric.md when evaluating samples.",
         source: "external",
         baseDir,
@@ -111,10 +103,6 @@ describe("use_skill agent tool", () => {
         id: "writer-distillation",
         name: "Writer Distillation",
         description: "Distill writer craft.",
-        whenToUse: "Use for style analysis.",
-        promptPacks: [],
-        toolHints: [],
-        contextNeeds: [],
         body: "Read references only when needed.",
         source: "external",
         baseDir,
@@ -139,10 +127,6 @@ describe("use_skill agent tool", () => {
         id: "linked-skill",
         name: "Linked Skill",
         description: "A linked skill root.",
-        whenToUse: "Use for the test.",
-        promptPacks: [],
-        toolHints: [],
-        contextNeeds: [],
         body: "Read references only when needed.",
         source: "external",
         baseDir: linkedDir,
@@ -157,13 +141,21 @@ describe("use_skill agent tool", () => {
   });
 
   it("refuses disabled and unknown skills", async () => {
-    const registry = createSkillRegistry();
+    const registry = createSkillRegistry({
+      skills: [{
+        id: "disabled-skill",
+        name: "Disabled Skill",
+        description: "A disabled test skill.",
+        body: "Do not load.",
+        source: "external",
+      }],
+    });
     const tool = createUseSkillTool({
       registry,
-      disabledSkillIds: ["open-world-play"],
+      disabledSkillIds: ["disabled-skill"],
     });
 
-    await expect(tool.execute("disabled", { skillId: "open-world-play" }))
+    await expect(tool.execute("disabled", { skillId: "disabled-skill" }))
       .rejects.toThrow(/disabled/i);
     await expect(tool.execute("missing", { skillId: "missing-skill" }))
       .rejects.toThrow(/not available/i);

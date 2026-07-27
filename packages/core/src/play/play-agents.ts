@@ -8,7 +8,7 @@ import {
   type PlayMutation,
   type PlayMutationInput,
 } from "../models/play.js";
-import { appendPromptPackGuidance } from "../skills/prompt-pack.js";
+import { appendPromptPackGuidance } from "../prompts/prompt-pack.js";
 
 export interface PlayActionInterpreterInput {
   readonly input: string;

@@ -1,20 +1,16 @@
-import { BUILTIN_CAPABILITY_SKILLS } from "./builtin.js";
 import type {
-  CapabilitySkillManifest,
+  AgentSkill,
   SkillRegistry,
   SkillResolutionInput,
   SkillResolutionResult,
 } from "./types.js";
 
 export interface CreateSkillRegistryOptions {
-  readonly skills?: ReadonlyArray<CapabilitySkillManifest>;
+  readonly skills?: ReadonlyArray<AgentSkill>;
 }
 
 export function createSkillRegistry(options: CreateSkillRegistryOptions = {}): SkillRegistry {
-  const skills = dedupeSkills([
-    ...BUILTIN_CAPABILITY_SKILLS,
-    ...(options.skills ?? []),
-  ]);
+  const skills = dedupeSkills(options.skills ?? []);
   const byId = new Map(skills.map((skill) => [skill.id, skill]));
 
   return {
@@ -29,7 +25,7 @@ export function createSkillRegistry(options: CreateSkillRegistryOptions = {}): S
       const requested = normalizeIdList(input.requestedSkills);
       const missingSkillIds: string[] = [];
       const disabledSkillIds = [...disabled].filter((id) => byId.has(id));
-      const used = new Map<string, CapabilitySkillManifest>();
+      const used = new Map<string, AgentSkill>();
       const forcedSkillIds: string[] = [];
 
       for (const id of requested) {
@@ -57,8 +53,8 @@ export function createSkillRegistry(options: CreateSkillRegistryOptions = {}): S
   };
 }
 
-function dedupeSkills(skills: ReadonlyArray<CapabilitySkillManifest>): CapabilitySkillManifest[] {
-  const byId = new Map<string, CapabilitySkillManifest>();
+function dedupeSkills(skills: ReadonlyArray<AgentSkill>): AgentSkill[] {
+  const byId = new Map<string, AgentSkill>();
   for (const skill of skills) {
     byId.set(normalizeSkillId(skill.id), {
       ...skill,

@@ -243,15 +243,8 @@ describe("ComposerAgent", () => {
 
     expect(result.trace.plannerInputs).toEqual(plan.plannerInputs);
     expect(result.trace.selectedSources).toContain("story/current_focus.md");
-    expect(result.trace.usedSkills).toEqual(["longform-writing"]);
-    expect(result.trace.promptPacks).toEqual([
-      "longform.writer",
-      "longform.reviser",
-      "longform.auditor",
-    ]);
-    expect(result.trace.contextNeeds).toContain("author-intent");
-    expect(result.trace.contextNeeds).toContain("current-focus");
-    expect(result.trace.contextNeeds).toContain("episodic-memory");
+    expect(result.trace).not.toHaveProperty("usedSkills");
+    expect(result.trace).not.toHaveProperty("contextNeeds");
     expect(result.trace.contextTiers.protectedSources).toContain("story/current_focus.md");
     expect(result.trace.contextTiers.protectedSources).toContain("story/author_intent.md");
     expect(result.trace.contextTiers.compressibleSources).not.toContain("story/author_intent.md");

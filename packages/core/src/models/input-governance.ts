@@ -93,9 +93,7 @@ export const ChapterTraceSchema = z.object({
   plannerInputs: z.array(z.string()),
   composerInputs: z.array(z.string()),
   selectedSources: z.array(z.string()),
-  usedSkills: z.array(z.string()).default([]),
   promptPacks: z.array(z.string()).default([]),
-  contextNeeds: z.array(z.string()).default([]),
   contextTiers: z.object({
     protectedSources: z.array(z.string()).default([]),
     compressibleSources: z.array(z.string()).default([]),

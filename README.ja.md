@@ -47,10 +47,10 @@ InkOS 1.7 は、言語をまたぐ納品、長編の未来予測、継続的な�
 
 ## v1.6.0 主要アップデート
 
-v1.6.0 は、InkOS を開放世界 Play からさらにインタラクティブ影遊、脚本、分镜、runtime skill、出典付きリサーチへ拡張する更新です。
+v1.6.0 は、InkOS を開放世界 Play からさらにインタラクティブ影遊、脚本、分镜、Agent Skills、出典付きリサーチへ拡張する更新です。
 
 - **インタラクティブ影遊**：分岐剧情、選択肢、変数 / フラグ、関係状態、エンディング、ノード画像、エクスポート可能なプロジェクトパッケージに対応。
-- **Runtime Skill**：内蔵 skill / プロジェクト内 skill により、専門ルール、prompt pack、context needs を注入できます。Chat Agent は現在のユーザー意図から `use_skill` を呼び出し、ユーザーは `@skill-id` で強制指定できます。session 種別やキーワード一致による機械的な起動は行いません。
+- **Agent Skills**：標準 `SKILL.md` の専門ガイダンスと静的資料を利用できます。Chat Agent は現在のユーザー意図から `use_skill` を呼び出し、ユーザーは `@skill-id` で強制指定できます。InkOS 独自の Skill 形式やキーワード一致による機械的な起動は行いません。
 - **出典付き Web リサーチ**：`research_web` が世界観、時代、職業、市場、事実確認の Markdown レポートを生成します。レポートは参考資料であり、それだけで canon や本文を書き換えません。
 - **脚本 / 分镜ワークフロー**：Studio Chat から脚本、分镜、インタラクティブ影遊の作成を提案し、確認後にファイルとして保存して Studio 内で確認できます。
 - **安定性修正**：章内の対象テキスト編集は軽い言い換えにも追従し、多章監査失敗で既存章索引を消さず、モデル / サービス切替後も active book を保持します。
@@ -80,7 +80,7 @@ v1.6.0 は、InkOS を開放世界 Play からさらにインタラクティブ�
 
 **Studio Chat** — 質問応答だけでなく、長編作成、Short、表紙生成、Play、永続テキスト編集を扱います。重いアクションは確認してから実行し、ツール結果がないのに成功したとは扱いません。
 
-**Runtime Skill とリサーチ** — `.inkos/skills/`、標準 AgentSkills / OpenClaw ディレクトリ、または Studio のフォルダー導入から専門 skill を追加できます。Chat Agent は意図に応じて利用し、`@skill-id` で強制使用もできます。外部 skill のスクリプトは自動実行しません。外部事実が必要な場合は出典付き Markdown リサーチレポートを生成できます。
+**Agent Skills とリサーチ** — `.agents/skills/`、標準 AgentSkills / OpenClaw ディレクトリ、または Studio のフォルダー導入から標準 `SKILL.md` を追加できます。Chat Agent は意図に応じて利用し、`@skill-id` で強制使用もできます。外部 skill のスクリプトは自動実行しません。外部事実が必要な場合は出典付き Markdown リサーチレポートを生成できます。
 
 <p align="center">
   <img src="assets/play-item-warcraft.png" width="420" alt="InkOS Play アイテム画像例">
