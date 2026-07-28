@@ -1,7 +1,7 @@
 ---
 name: inkos
 description: Story Creation and Translation AI Agent with Studio Chat, CLI, and TUI - use for long-form novels, short fiction, scripts, storyboards, interactive-film projects, open-world / branching play, fan fiction, spinoffs, style imitation, continuations, covers, and multilingual EPUB/PDF/TXT/Markdown translation. Includes Agent Skills, traceable research, governed context, persistent story state, multi-model routing, image services, and InkOS Studio.
-version: 2.8.0
+version: 2.8.1
 metadata: { "openclaw": { "emoji": "📖", "requires": { "bins": ["inkos", "node"], "env": ["OPENAI_API_KEY"] }, "primaryEnv": "OPENAI_API_KEY", "homepage": "https://github.com/Narcooo/inkos", "install": [{ "id": "npm", "kind": "node", "package": "@actalk/inkos", "label": "Install InkOS (npm)" }] } }
 ---
 
@@ -304,7 +304,7 @@ If you need separate control over each pipeline stage:
    ```bash
    inkos revise book-id chapter-1 --mode polish --json
    ```
-   - Modes: `polish` (minor), `spot-fix` (targeted), `rewrite` (major), `rework` (structure), `anti-detect` (reduce AI traces)
+   - Modes documented for agent use: `polish` (minor), `spot-fix` (targeted), `rewrite` (major), and `rework` (structure)
 
 ### Workflow 7: Monitor Platform Trends
 
@@ -536,7 +536,7 @@ inkos translate export <project-id> --format epub
 - **Translation workbench** — import EPUB, text-based PDF, TXT, or Markdown; choose source and target languages; translate, compare, review, and export complete projects
 - **Agent Skills management** — list standard skills, import AgentSkills/OpenClaw folders with static references into `.agents/skills/`, let Chat invoke skills from intent, and force skills from Chat
 - **Research search provider** — configure external web search API credentials for `research_web`
-- **Chapter review & editing** — approve/reject drafts, edit content inline, multi-mode revision (polish/spot-fix/rewrite/anti-detect)
+- **Chapter review & editing** — approve/reject drafts, edit content inline, and revise with polish/spot-fix/rewrite/rework modes
 - **Real-time writing progress** — SSE-based live updates during chapter generation
 - **Market radar** — AI-powered trend analysis with platform/genre recommendations
 - **Analytics** — word count, audit pass rate, chapter ranking, token usage
@@ -701,7 +701,7 @@ inkos genre copy xuanhuan
 | `inkos write next` | Full pipeline (draft→audit→revise) | Primary workflow command |
 | `inkos draft` | Generate draft only | No auditing/revision |
 | `inkos audit` | 33-dimension quality check | Standalone evaluation |
-| `inkos revise` | Revise chapter | Modes: polish/spot-fix/rewrite/rework/anti-detect |
+| `inkos revise` | Revise chapter | Modes documented for agent use: polish/spot-fix/rewrite/rework |
 | `inkos agent` | Natural language interface | Flexible requests |
 | `inkos style analyze` | Analyze reference text | Extracts style profile |
 | `inkos style import` | Apply style to book | Makes style permanent |
@@ -791,11 +791,11 @@ inkos down
 
 - **License**: the ClawHub skill descriptor is MIT-0 per platform policy, but the underlying `@actalk/inkos`, `@actalk/inkos-core`, and `@actalk/inkos-studio` npm packages are **AGPL-3.0-only**. Running InkOS and distributing modified versions are governed by AGPL. Full source on GitHub for auditability.
 - **No install hooks**: npm package has no `preinstall`/`postinstall`/`install` scripts. Install is inert.
-- **Local-only file I/O**: all read/write stays inside the project directory (`books/*`, `inkos.json`, `inkos.log`). No writes outside the working directory.
-- **No telemetry**: InkOS does not phone home, collect usage stats, or ship any data to InkOS-controlled servers. The only outbound traffic is to the LLM provider endpoint you explicitly configure.
+- **Documented file locations**: manuscripts, story state, logs, imported Skills, and project secrets stay under the selected project directory. Optional global CLI configuration may be stored under `~/.inkos/`; user-level Skills may be read from `~/.agents/skills/` and `~/.openclaw/skills/`.
+- **No InkOS telemetry**: InkOS does not send usage analytics to an InkOS-controlled service. Content can leave the machine when the user invokes a configured LLM, image, web-search, aggregator, or custom provider; review each provider's endpoint and data policy before enabling it.
 - **Credential handling**: prefer Studio service settings or `--api-key-env <VAR_NAME>` over literal keys. Studio stores service secrets in project-local `.inkos/secrets.json`; CLI env settings live in `~/.inkos/.env` or project `.env`. Treat all of these as secrets and keep them out of commits.
 - **Custom provider base-URL**: `--provider custom` forwards your API key to whatever URL you specify. Only point it at endpoints you trust (your own proxy or an audited reverse-proxy). Never paste an untrusted `--base-url`.
-- **No elevated privileges**: InkOS requires no sudo, no global state mutation, no network listening port (Studio binds `localhost:4567` only).
+- **Local services and updates**: InkOS requires no sudo. Studio opens a localhost listener on port `4567` by default (or the port selected by the user), and daemon mode runs only when explicitly started. `inkos update` is an explicit user command and must not be invoked autonomously by an agent.
 
 ## Support & Resources
 
