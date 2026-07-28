@@ -1,7 +1,7 @@
 ---
 name: inkos
 description: Story Creation and Translation AI Agent with Studio Chat, CLI, and TUI - use for long-form novels, short fiction, scripts, storyboards, interactive-film projects, open-world / branching play, fan fiction, spinoffs, style imitation, continuations, covers, and multilingual EPUB/PDF/TXT/Markdown translation. Includes Agent Skills, traceable research, governed context, persistent story state, multi-model routing, image services, and InkOS Studio.
-version: 2.8.2
+version: 2.8.3
 metadata: { "openclaw": { "emoji": "📖", "requires": { "bins": ["inkos", "node"], "env": ["OPENAI_API_KEY"] }, "primaryEnv": "OPENAI_API_KEY", "homepage": "https://github.com/Narcooo/inkos", "install": [{ "id": "npm", "kind": "node", "package": "@actalk/inkos", "label": "Install InkOS (npm)" }] } }
 ---
 
@@ -15,6 +15,7 @@ Long-form writing still uses the chapter pipeline internally:
 - **Settlement and review**: Observer / Reflector update runtime state; Auditor checks continuity and quality; Reviser handles critical issues. The default write cycle keeps automatic repair conservative and leaves unresolved issues visible for human or agent follow-up.
 
 Truth files are persisted as schema-validated JSON (`story/state/*.json`) with markdown projections for human readability. SQLite temporal memory database (`story/memory.db`) enables relevance-based retrieval on Node 22+.
+Persisted story memory is isolated to its project and book, excludes credentials and unrelated files, and is never reused across projects unless the user explicitly imports material. Users can inspect or delete the owning book/project through Studio or CLI.
 
 ## v1.7.2 Mental Model
 
@@ -793,7 +794,7 @@ inkos down
 - **Documented file locations**: manuscripts, story state, logs, imported Skills, and project secrets stay under the selected project directory. Optional global CLI configuration may be stored under `~/.inkos/`; user-level Skills may be read from `~/.agents/skills/` and `~/.openclaw/skills/`.
 - **Project-isolated retention**: each project's manuscripts, state, and memory remain in that project until the user deletes the book or project. Do not reuse one project's persisted memory in another project unless the user explicitly imports that material.
 - **No InkOS telemetry**: InkOS does not send usage analytics to an InkOS-controlled service. Content can leave the machine when the user invokes a configured LLM, image, web-search, aggregator, or custom provider; review each provider's endpoint and data policy before enabling it.
-- **Credential handling**: prefer Studio service settings or `--api-key-env <VAR_NAME>` over literal keys. Studio stores service secrets in project-local `.inkos/secrets.json`; CLI env settings live in `~/.inkos/.env` or project `.env`. Treat all of these as secrets and keep them out of commits.
+- **Credential handling**: prefer Studio secret settings or environment-backed API keys over literal values. Agents and imported Skills must never read, print, summarize, or transmit credentials; secret stores must stay outside prompts, exports, archives, and commits.
 - **Custom provider base-URL**: `--provider custom` forwards your API key to whatever URL you specify. Only point it at endpoints you trust (your own proxy or an audited reverse-proxy). Never paste an untrusted `--base-url`.
 - **Local services**: InkOS requires no sudo. Studio opens a localhost listener on port `4567` by default (or the port selected by the user), and daemon mode runs only when explicitly started.
 
