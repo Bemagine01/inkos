@@ -1,7 +1,7 @@
 ---
 name: inkos
 description: Story Creation and Translation AI Agent with Studio Chat, CLI, and TUI - use for long-form novels, short fiction, scripts, storyboards, interactive-film projects, open-world / branching play, fan fiction, spinoffs, style imitation, continuations, covers, and multilingual EPUB/PDF/TXT/Markdown translation. Includes Agent Skills, traceable research, governed context, persistent story state, multi-model routing, image services, and InkOS Studio.
-version: 2.7.0
+version: 2.8.0
 metadata: { "openclaw": { "emoji": "📖", "requires": { "bins": ["inkos", "node"], "env": ["OPENAI_API_KEY"] }, "primaryEnv": "OPENAI_API_KEY", "homepage": "https://github.com/Narcooo/inkos", "install": [{ "id": "npm", "kind": "node", "package": "@actalk/inkos", "label": "Install InkOS (npm)" }] } }
 ---
 
@@ -16,9 +16,9 @@ Long-form writing still uses the chapter pipeline internally:
 
 Truth files are persisted as schema-validated JSON (`story/state/*.json`) with markdown projections for human readability. SQLite temporal memory database (`story/memory.db`) enables relevance-based retrieval on Node 22+.
 
-## v1.7.1 Mental Model
+## v1.7.2 Mental Model
 
-Treat InkOS as a confirmable action system, not a bag of prompt shortcuts. v1.7.1 adds non-canonical narrative forecasting, background production tasks that do not block discussion, retryable task state, whole-book backup / restore, and rollback-safe latest-chapter deletion.
+Treat InkOS as a confirmable action system, not a bag of prompt shortcuts. v1.7.2 replaces the former InkOS-private Skill protocol with standard AgentSkills / OpenClaw `SKILL.md` packages. Skills provide professional guidance and static references only: they can be selected explicitly or activated by the Chat Agent through `use_skill`, but they never grant execution permissions.
 
 - Natural-language requests should go through Studio Chat / TUI / `inkos interact` whenever possible.
 - Do not infer success from assistant prose. A book, short, cover, or play step is complete only when the corresponding tool result and files exist.
@@ -38,7 +38,7 @@ Treat InkOS as a confirmable action system, not a bag of prompt shortcuts. v1.7.
 - Prompt packs are user-tunable in Studio Project Settings. Project overrides are saved under `prompt/<pack>/<prompt>.md`; do not edit generated artifacts just to change system behavior.
 - Long-form chapter revision from Chat passes the current user instruction into the reviser as a one-off brief. If the revision is not applied, inspect the returned gate metrics and remaining audit issues before claiming it was fixed.
 
-v1.7.0 keeps the v1.6 interactive-film and Agent Skills model, then adds complete multilingual translation/localization, English-native short/script/storyboard/interactive-film paths, existing-novel import from Chat, configurable review and revision gates, abortable long tasks, recoverable write locks, material archive/retrieval, and Studio-editable prompt packs. Still surface unresolved review or execution issues plainly instead of claiming they were fixed.
+v1.7.0 added complete multilingual translation/localization, English-native short/script/storyboard/interactive-film paths, existing-novel import from Chat, configurable review and revision gates, abortable long tasks, recoverable write locks, material archive/retrieval, and Studio-editable prompt packs. v1.7.1 added non-canonical narrative forecasting, background production tasks, retryable task state, whole-book backup / restore, and rollback-safe latest-chapter deletion. Still surface unresolved review or execution issues plainly instead of claiming they were fixed.
 
 ## When to Use InkOS
 

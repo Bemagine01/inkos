@@ -2,6 +2,26 @@
 
 [中文](CHANGELOG.md) | English
 
+## v1.7.2
+
+### Release Focus
+
+Agent Skills compatibility and a single Skill runtime. InkOS now consumes standard `SKILL.md` packages directly. The Chat Agent can activate a Skill from user intent, while users can force one from the composer `+` button or with `@skill-id`. The former InkOS-private Skill protocol, keyword triggers, and parallel context planner have been removed instead of being layered beside the new system.
+
+### Agent Skills
+
+- Added the typed `use_skill` tool to the pi-agent loop: the model sees available Skill names and descriptions, then activates professional guidance through a structured tool call
+- Studio can import a complete folder containing `SKILL.md`; static references are preserved under the project's `.agents/skills/`, while external scripts are never executed automatically
+- Added standard project discovery from `skills/` and `.agents/skills/`, plus user discovery from `~/.agents/skills/` and `~/.openclaw/skills/`
+- Users can select and force a Skill in the Chat composer; one-turn intent activation expires instead of leaking into later turns or another book
+- Project Settings shows each Skill's source and can delete project imports; deletion immediately removes the Skill from both the Agent catalog and composer
+
+### Compatibility
+
+- Removed the legacy `.inkos/skills` loader and InkOS-only fields such as `whenToUse`, `promptPacks`, `toolHints`, and `contextNeeds`
+- Prompt packs remain a separate, Studio-editable subsystem under Project Settings instead of masquerading as Skills
+- Migrate old Skills to a standard folder containing `SKILL.md` and static references, then import it in Studio or place it under `.agents/skills/`
+
 ## v1.7.1
 
 ### Release Focus

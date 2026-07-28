@@ -2,6 +2,26 @@
 
 [English](CHANGELOG.en.md) | 中文
 
+## v1.7.2
+
+### Release Focus
+
+Agent Skills 兼容与单一 Skill 内核更新：InkOS 现在直接读取标准 `SKILL.md` 能力包，Chat Agent 可以根据用户意图自主调用，也可以由用户通过输入框 `+` 按钮或 `@skill-id` 强制启用。旧的 InkOS 私有 Skill 协议、关键词触发器和并行上下文规划器已被完整替换，不再叠加两套实现。
+
+### Agent Skills
+
+- 新增基于 pi-agent 工具循环的 `use_skill`：模型先读取可用 Skill 的名称与描述，再通过结构化工具调用激活所需专业能力
+- Studio 支持导入包含 `SKILL.md` 的完整文件夹，静态参考资料会一并保存到项目 `.agents/skills/`；外部脚本不会被自动执行
+- 支持项目 `skills/`、`.agents/skills/`，以及用户级 `~/.agents/skills/`、`~/.openclaw/skills/` 等标准位置
+- 用户可在 Chat 输入区选择并强制启用 Skill；一次性意图激活不会永久污染后续会话或切换书籍后的上下文
+- Studio 项目设置统一展示 Skill 来源，并支持删除项目导入的 Skill；删除后立即从 Agent 与选择列表中移除
+
+### Compatibility
+
+- 删除旧 `.inkos/skills` 私有加载路径，以及 `whenToUse`、`promptPacks`、`toolHints`、`contextNeeds` 等 InkOS 专用字段
+- 提示词包继续由 Studio“项目设置 → 提示词”独立管理，不再伪装成 Skill 能力
+- 旧 Skill 请迁移为标准目录：保留 `SKILL.md` 与静态参考资料，通过 Studio 重新导入或放入 `.agents/skills/`
+
 ## v1.7.1
 
 ### Release Focus
