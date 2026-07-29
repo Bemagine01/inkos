@@ -325,6 +325,7 @@ vi.mock("@actalk/inkos-core", async (importOriginal) => {
     resolveServiceModel: resolveServiceModelMock,
     COVER_PROVIDER_PRESETS: actual.COVER_PROVIDER_PRESETS,
     coverSecretKey: actual.coverSecretKey,
+    normalizeCoverBaseUrl: actual.normalizeCoverBaseUrl,
     resolveCoverProviderPreset: actual.resolveCoverProviderPreset,
     isApiKeyOptionalForEndpoint: actual.isApiKeyOptionalForEndpoint,
     loadSecrets: loadSecretsMock,
@@ -2321,6 +2322,7 @@ describe("createStudioServer daemon lifecycle", () => {
       body: JSON.stringify({
         service: "kkaiapi",
         model: "gpt-image-2",
+        baseUrl: "https://images.example.com/v1/",
       }),
     });
     expect(saveConfig.status).toBe(200);
@@ -2329,6 +2331,15 @@ describe("createStudioServer daemon lifecycle", () => {
     expect(raw.llm.cover).toEqual({
       service: "kkaiapi",
       model: "gpt-image-2",
+      baseUrl: "https://images.example.com/v1",
+    });
+
+    const readConfig = await app.request("http://localhost/api/v1/cover/config");
+    expect(readConfig.status).toBe(200);
+    await expect(readConfig.json()).resolves.toMatchObject({
+      service: "kkaiapi",
+      model: "gpt-image-2",
+      baseUrl: "https://images.example.com/v1",
     });
 
     const saveSecret = await app.request("http://localhost/api/v1/cover/secret/kkaiapi", {
@@ -2342,6 +2353,28 @@ describe("createStudioServer daemon lifecycle", () => {
         "cover:kkaiapi": { apiKey: "sk-cover" },
       },
     });
+  });
+
+  it("rejects invalid custom cover base URLs without changing project config", async () => {
+    const { createStudioServer } = await import("./server.js");
+    const app = createStudioServer(cloneProjectConfig() as never, root);
+
+    const response = await app.request("http://localhost/api/v1/cover/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        service: "kkaiapi",
+        model: "gpt-image-2",
+        baseUrl: "file:///tmp/fake-cover-api",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining("Base URL"),
+    });
+    const raw = JSON.parse(await readFile(join(root, "inkos.json"), "utf-8"));
+    expect(raw.llm.cover).toBeUndefined();
   });
 
   it("serves generated project cover images without exposing arbitrary files", async () => {

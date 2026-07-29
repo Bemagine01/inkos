@@ -454,6 +454,7 @@ export { loadSecrets, saveSecrets, getServiceApiKey, type SecretsFile } from "./
 export {
   COVER_PROVIDER_PRESETS,
   coverSecretKey,
+  normalizeCoverBaseUrl,
   resolveCoverProviderPreset,
   type CoverProviderId,
   type CoverProviderPreset,

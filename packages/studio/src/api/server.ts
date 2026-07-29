@@ -57,6 +57,7 @@ import {
   type PlayImageSettings,
   Scheduler,
   coverSecretKey,
+  normalizeCoverBaseUrl,
   resolveCoverProviderPreset,
   SessionKindSchema,
   isExplicitWriteChapterCommand,
@@ -2063,7 +2064,7 @@ function mergeServiceConfig(existing: ServiceConfigEntry[], updates: ServiceConf
   return [...merged.values()];
 }
 
-function normalizeCoverConfig(raw: unknown): { service: string; model: string } | undefined {
+function normalizeCoverConfig(raw: unknown): { service: string; model: string; baseUrl?: string } | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const record = raw as Record<string, unknown>;
   const service = typeof record.service === "string" ? record.service : "";
@@ -2073,7 +2074,12 @@ function normalizeCoverConfig(raw: unknown): { service: string; model: string } 
   const model = requestedModel && preset.models.includes(requestedModel)
     ? requestedModel
     : preset.defaultModel;
-  return { service: preset.service, model };
+  const baseUrl = normalizeCoverBaseUrl(record.baseUrl);
+  return {
+    service: preset.service,
+    model,
+    ...(baseUrl ? { baseUrl } : {}),
+  };
 }
 
 function syncTopLevelLlmMirror(llm: Record<string, unknown>): void {
@@ -3835,6 +3841,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
     return c.json({
       service: cover?.service ?? null,
       model: cover?.model ?? null,
+      baseUrl: cover?.baseUrl ?? null,
       configured,
       providers: COVER_PROVIDER_PRESETS.map((provider) => ({
         service: provider.service,
@@ -3848,7 +3855,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
   });
 
   app.put("/api/v1/cover/config", async (c) => {
-    const body = await c.req.json<{ service?: string; model?: string }>();
+    const body = await c.req.json<{ service?: string; model?: string; baseUrl?: string }>();
     const preset = resolveCoverProviderPreset(body.service);
     if (!preset) {
       return c.json({ error: "Unsupported cover service" }, 400);
@@ -3856,6 +3863,17 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
     const model = typeof body.model === "string" && preset.models.includes(body.model)
       ? body.model
       : preset.defaultModel;
+    const requestedBaseUrl = typeof body.baseUrl === "string" ? body.baseUrl.trim() : "";
+    const baseUrl = normalizeCoverBaseUrl(requestedBaseUrl);
+    if (requestedBaseUrl && !baseUrl) {
+      return c.json({
+        error: pick(
+          await currentProjectLanguage(),
+          "封面 Base URL 必须是有效的 HTTP(S) 地址，且不能包含账号、查询参数或锚点。",
+          "Cover Base URL must be a valid HTTP(S) URL without credentials, query parameters, or fragments.",
+        ),
+      }, 400);
+    }
 
     const config = await loadRawConfig(root);
     config.llm = config.llm ?? {};
@@ -3863,9 +3881,10 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
     llm.cover = {
       service: preset.service,
       model,
+      ...(baseUrl ? { baseUrl } : {}),
     };
     await saveRawConfig(root, config);
-    return c.json({ ok: true, service: preset.service, model });
+    return c.json({ ok: true, service: preset.service, model, baseUrl: baseUrl ?? null });
   });
 
   app.get("/api/v1/cover/secret/:service", async (c) => {
