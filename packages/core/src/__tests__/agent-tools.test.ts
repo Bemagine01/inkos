@@ -680,6 +680,39 @@ describe("agent deterministic writing tools", () => {
     expect(pipeline.writeNextChapter).toHaveBeenCalledWith("harbor", 2600);
   });
 
+  it("runs a requested chapter batch through one writer operation", async () => {
+    const pipeline = {
+      writeNextChapter: vi.fn(),
+      writeChapters: vi.fn(async () => [
+        { chapterNumber: 4, title: "第四章", wordCount: 2600, status: "ready-for-review" },
+        { chapterNumber: 5, title: "第五章", wordCount: 2550, status: "ready-for-review" },
+        { chapterNumber: 6, title: "第六章", wordCount: 2490, status: "audit-failed" },
+      ]),
+    };
+    const tool = createSubAgentTool(pipeline as never, "harbor");
+
+    const result = await tool.execute("tool-writer-batch", {
+      agent: "writer",
+      bookId: "harbor",
+      chapterCount: 5,
+      chapterWordCount: 2600,
+      instruction: "连续写五章",
+    } as any);
+
+    expect(pipeline.writeChapters).toHaveBeenCalledWith(
+      "harbor",
+      5,
+      expect.objectContaining({ wordCount: 2600 }),
+    );
+    expect(pipeline.writeNextChapter).not.toHaveBeenCalled();
+    expect(result.details).toMatchObject({
+      kind: "chapters_written",
+      requestedCount: 5,
+      completedCount: 3,
+      stoppedStatus: "audit-failed",
+    });
+  });
+
   it("runs the writer pipeline inside the tool AbortSignal scope", async () => {
     const controller = new AbortController();
     const pipeline = {

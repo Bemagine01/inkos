@@ -18,6 +18,7 @@ const evaluateBookQualityMock = vi.fn();
 const reviseDraftMock = vi.fn();
 const resyncChapterArtifactsMock = vi.fn();
 const writeNextChapterMock = vi.fn();
+const writeChaptersMock = vi.fn();
 const rollbackToChapterMock = vi.fn();
 const saveChapterIndexMock = vi.fn();
 const loadChapterIndexMock = vi.fn();
@@ -217,6 +218,7 @@ vi.mock("@actalk/inkos-core", async (importOriginal) => {
     reviseDraft = reviseDraftMock;
     resyncChapterArtifacts = resyncChapterArtifactsMock;
     writeNextChapter = writeNextChapterMock;
+    writeChapters = writeChaptersMock;
   }
 
   class MockConsolidatorAgent {
@@ -412,6 +414,7 @@ describe("createStudioServer daemon lifecycle", () => {
     reviseDraftMock.mockReset();
     resyncChapterArtifactsMock.mockReset();
     writeNextChapterMock.mockReset();
+    writeChaptersMock.mockReset();
     rollbackToChapterMock.mockReset();
     saveChapterIndexMock.mockReset();
     loadChapterIndexMock.mockReset();
@@ -473,6 +476,16 @@ describe("createStudioServer daemon lifecycle", () => {
       status: "ready-for-review",
       auditResult: { passed: true, issues: [], summary: "rewritten" },
     });
+    writeChaptersMock.mockResolvedValue([
+      {
+        chapterNumber: 3,
+        title: "Rewritten Chapter",
+        wordCount: 1800,
+        revised: false,
+        status: "ready-for-review",
+        auditResult: { passed: true, issues: [], summary: "rewritten" },
+      },
+    ]);
     createLLMClientMock.mockReset();
     createLLMClientMock.mockReturnValue({});
     createLLMTranslationModelMock.mockReset();
@@ -4182,6 +4195,53 @@ describe("createStudioServer daemon lifecycle", () => {
         },
       }),
     );
+  }, 60_000);
+
+  it("runs a confirmed multi-chapter write sequentially through the existing write_next intent", async () => {
+    writeChaptersMock.mockResolvedValueOnce([
+      {
+        chapterNumber: 3,
+        title: "第三章",
+        wordCount: 1800,
+        revised: false,
+        status: "ready-for-review",
+        auditResult: { passed: true, issues: [], summary: "ok" },
+      },
+      {
+        chapterNumber: 4,
+        title: "第四章",
+        wordCount: 1750,
+        revised: false,
+        status: "ready-for-review",
+        auditResult: { passed: true, issues: [], summary: "ok" },
+      },
+    ]);
+    const { createStudioServer } = await import("./server.js");
+    const app = createStudioServer(cloneProjectConfig() as never, root);
+
+    const response = await app.request("http://localhost/api/v1/agent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        instruction: "连续写两章",
+        activeBookId: "demo-book",
+        sessionId: "agent-session-1",
+        sessionKind: "book",
+        actionSource: "button",
+        requestedIntent: "write_next",
+        actionPayload: { writeNext: { chapterCount: 2 } },
+      }),
+    });
+
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.response).toContain("已连续完成 2 章");
+    expect(writeChaptersMock).toHaveBeenCalledWith(
+      "demo-book",
+      2,
+      expect.objectContaining({ onChapterComplete: expect.any(Function) }),
+    );
+    expect(writeNextChapterMock).not.toHaveBeenCalled();
   }, 60_000);
 
   it("does not present audit-failed direct write-next as completed", async () => {

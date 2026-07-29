@@ -566,6 +566,11 @@ const SubAgentParams = Type.Object({
     description: "Optional book ID. In active-book sessions, omit it to use the current active book; if provided, it must match the current active book. For architect creation, this optionally sets the new book ID.",
   })),
   chapterNumber: Type.Optional(Type.Number({ description: "auditor/reviser: target chapter number. Omit to use the latest chapter." })),
+  chapterCount: Type.Optional(Type.Integer({
+    minimum: 1,
+    maximum: 20,
+    description: "writer only: number of consecutive new chapters to write in this operation. Default: 1. InkOS writes them sequentially under one book lock.",
+  })),
   // -- architect params --
   title: Type.Optional(Type.String({ description: "architect only: explicit book title. Required when creating a book." })),
   genre: Type.Optional(Type.String({ description: "architect only: genre (xuanhuan, urban, mystery, romance, scifi, fantasy, wuxia, general, etc.)" })),
@@ -687,7 +692,7 @@ export function createSubAgentTool(
       _signal?: AbortSignal,
       onUpdate?: AgentToolUpdateCallback,
     ): Promise<AgentToolResult<unknown>> {
-      const { agent, instruction, bookId, title, chapterNumber, genre, platform, language, targetChapters, chapterWordCount, revise, feedback, mode, format, approvedOnly } = params;
+      const { agent, instruction, bookId, title, chapterNumber, chapterCount, genre, platform, language, targetChapters, chapterWordCount, revise, feedback, mode, format, approvedOnly } = params;
 
       const progress = (msg: string) => {
         onUpdate?.(textResult(msg));
@@ -770,6 +775,40 @@ export function createSubAgentTool(
 
           case "writer": {
             const targetBookId = resolveToolBookId("writer", bookId, activeBookId);
+            const requestedCount = chapterCount ?? 1;
+            if (requestedCount > 1) {
+              progress(`Writing ${requestedCount} consecutive chapters for "${targetBookId}"...`);
+              const results = await runPipelineWithAbortSignal(
+                pipeline,
+                _signal,
+                () => pipeline.writeChapters(targetBookId, requestedCount, {
+                  wordCount: chapterWordCount,
+                  onChapterComplete(result, completedCount, totalCount) {
+                    progress(`Writer finished chapter ${result.chapterNumber} (${completedCount}/${totalCount}) for "${targetBookId}".`);
+                  },
+                }),
+              );
+              const last = results.at(-1);
+              const stoppedStatus = last?.status !== "ready-for-review" ? last?.status : undefined;
+              return textResult(
+                stoppedStatus
+                  ? `Writer completed ${results.length} of ${requestedCount} requested chapters for "${targetBookId}" and stopped because chapter ${last?.chapterNumber} ended with status "${stoppedStatus}".`
+                  : `Writer completed ${results.length} consecutive chapters for "${targetBookId}".`,
+                {
+                  kind: "chapters_written",
+                  bookId: targetBookId,
+                  requestedCount,
+                  completedCount: results.length,
+                  chapters: results.map((result) => ({
+                    chapterNumber: result.chapterNumber,
+                    title: result.title,
+                    wordCount: result.wordCount,
+                    status: result.status,
+                  })),
+                  ...(stoppedStatus ? { stoppedStatus } : {}),
+                },
+              );
+            }
             progress(`Writing next chapter for "${targetBookId}"...`);
             const result = await runPipelineWithAbortSignal(
               pipeline,

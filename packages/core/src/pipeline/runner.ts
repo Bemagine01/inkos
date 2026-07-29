@@ -303,6 +303,16 @@ export interface ChapterPipelineResult {
   readonly tokenUsage?: TokenUsageSummary;
 }
 
+export interface WriteChaptersOptions {
+  readonly wordCount?: number;
+  readonly temperatureOverride?: number;
+  readonly onChapterComplete?: (
+    result: ChapterPipelineResult,
+    completedCount: number,
+    requestedCount: number,
+  ) => void;
+}
+
 // Atomic operation results
 export interface DraftResult {
   readonly chapterNumber: number;
@@ -1667,6 +1677,37 @@ export class PipelineRunner {
     const releaseLock = await this.state.acquireBookLock(bookId);
     try {
       return await this._writeNextChapterLocked(bookId, wordCount, temperatureOverride, this.config.externalContext);
+    } finally {
+      await releaseLock();
+    }
+  }
+
+  async writeChapters(
+    bookId: string,
+    chapterCount: number,
+    options: WriteChaptersOptions = {},
+  ): Promise<ReadonlyArray<ChapterPipelineResult>> {
+    if (!Number.isInteger(chapterCount) || chapterCount < 1 || chapterCount > 20) {
+      throw new Error(`chapterCount must be an integer between 1 and 20; received ${chapterCount}.`);
+    }
+
+    this.throwIfOperationAborted();
+    const releaseLock = await this.state.acquireBookLock(bookId);
+    try {
+      const results: ChapterPipelineResult[] = [];
+      for (let index = 0; index < chapterCount; index += 1) {
+        this.throwIfOperationAborted();
+        const result = await this._writeNextChapterLocked(
+          bookId,
+          options.wordCount,
+          options.temperatureOverride,
+          this.config.externalContext,
+        );
+        results.push(result);
+        options.onChapterComplete?.(result, results.length, chapterCount);
+        if (result.status !== "ready-for-review") break;
+      }
+      return results;
     } finally {
       await releaseLock();
     }

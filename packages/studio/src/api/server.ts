@@ -1430,12 +1430,21 @@ interface WriteNextChapterToolResult {
   readonly isError?: boolean;
   readonly content: ReadonlyArray<{ readonly type: "text"; readonly text: string }>;
   readonly details: {
-    readonly kind: "chapter_written";
+    readonly kind: "chapter_written" | "chapters_written";
     readonly bookId: string;
-    readonly chapterNumber: number;
+    readonly chapterNumber?: number;
     readonly title?: string;
-    readonly wordCount: number;
+    readonly wordCount?: number;
     readonly status?: string;
+    readonly requestedCount?: number;
+    readonly completedCount?: number;
+    readonly stoppedStatus?: string;
+    readonly chapters?: ReadonlyArray<{
+      readonly chapterNumber: number;
+      readonly title?: string;
+      readonly wordCount: number;
+      readonly status?: string;
+    }>;
   };
 }
 
@@ -1471,6 +1480,7 @@ function createWriteNextChapterTool(
   pipeline: PipelineRunner,
   bookId: string,
   lang: StudioLanguage,
+  chapterCount = 1,
 ): {
   readonly name: "sub_agent";
   readonly execute: (
@@ -1483,6 +1493,65 @@ function createWriteNextChapterTool(
   return {
     name: "sub_agent",
     async execute(_toolCallId, _params, signal, onUpdate) {
+      if (chapterCount > 1) {
+        onUpdate?.({
+          content: [{
+            type: "text",
+            text: pick(
+              lang,
+              `正在为 ${bookId} 连续写 ${chapterCount} 章…`,
+              `Writing ${chapterCount} consecutive chapters for ${bookId}...`,
+            ),
+          }],
+        });
+        const results = await pipeline.runWithAbortSignal(
+          signal,
+          () => pipeline.writeChapters(bookId, chapterCount, {
+            onChapterComplete(result, completedCount, requestedCount) {
+              onUpdate?.({
+                content: [{
+                  type: "text",
+                  text: pick(
+                    lang,
+                    `第 ${completedCount}/${requestedCount} 章已落盘：第 ${result.chapterNumber} 章《${result.title}》。`,
+                    `${completedCount}/${requestedCount} persisted: chapter ${result.chapterNumber} "${result.title}".`,
+                  ),
+                }],
+              });
+            },
+          }),
+        );
+        const last = results.at(-1);
+        const stoppedStatus = last?.status !== "ready-for-review" ? last?.status : undefined;
+        const responseText = stoppedStatus
+          ? pick(
+              lang,
+              `已完成 ${results.length}/${chapterCount} 章；第 ${last?.chapterNumber} 章状态为 ${stoppedStatus}，批量写作已停止，请复核后再继续。`,
+              `Completed ${results.length}/${chapterCount} chapters. Chapter ${last?.chapterNumber} ended with ${stoppedStatus}, so the batch stopped for review.`,
+            )
+          : pick(
+              lang,
+              `已连续完成 ${results.length} 章（第 ${results[0]?.chapterNumber} 章至第 ${last?.chapterNumber} 章）。`,
+              `Completed ${results.length} consecutive chapters (chapters ${results[0]?.chapterNumber}-${last?.chapterNumber}).`,
+            );
+        return {
+          ...(stoppedStatus ? { isError: true } : {}),
+          content: [{ type: "text", text: responseText }],
+          details: {
+            kind: "chapters_written",
+            bookId,
+            requestedCount: chapterCount,
+            completedCount: results.length,
+            chapters: results.map((result) => ({
+              chapterNumber: result.chapterNumber,
+              title: result.title,
+              wordCount: result.wordCount,
+              status: result.status,
+            })),
+            ...(stoppedStatus ? { stoppedStatus } : {}),
+          },
+        };
+      }
       onUpdate?.({
         content: [{
           type: "text",
@@ -1572,7 +1641,8 @@ async function executeConfirmedProductionAction(args: {
     if (!args.bookId) {
       throw new ApiError(400, "BOOK_ID_REQUIRED", pick(lang, "写下一章需要先打开一本书。", "Writing the next chapter requires an active book."));
     }
-    tool = createWriteNextChapterTool(args.pipeline, args.bookId, lang);
+    const chapterCount = actionPayload?.writeNext?.chapterCount ?? 1;
+    tool = createWriteNextChapterTool(args.pipeline, args.bookId, lang, chapterCount);
     agent = "writer";
     params = { agent: "writer", bookId: args.bookId };
   } else if (args.requestedIntent === "generate_cover") {

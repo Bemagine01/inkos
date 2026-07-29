@@ -515,7 +515,7 @@ function buildBookPrompt(bookId: string, isZh: boolean): string {
 ## 可用工具
 
 - sub_agent：委托子智能体执行当前书重操作：
-  - agent="writer" 续写下一章，永远接着最后一章往下写，不能指定章节号。参数：chapterWordCount。
+  - agent="writer" 从最后一章继续顺序写，不能指定任意章节号。参数：chapterCount（连续写几章，1-20，默认 1）、chapterWordCount。
   - agent="auditor" 审计已有章节。参数：chapterNumber 指定第几章；不传则审最新章。
   - agent="reviser" 修改已有章节。必须传 chapterNumber。参数：chapterNumber, mode: spot-fix/polish/rewrite/rework/anti-detect。
   - agent="exporter" 导出书籍。参数：format: txt/md/epub, approvedOnly: true/false。
@@ -539,6 +539,7 @@ function buildBookPrompt(bookId: string, isZh: boolean): string {
 - 用户要求续写、写下一章、继续正文时，必须调用 sub_agent(agent="writer")；不要先 read/ls 再自己写正文。
 - sub_agent 成功返回后，本轮直接结束。不要继续调用 read、ls、patch_chapter_text，也不要再补写正文。
 - 用户说“写下一章 / 继续写 / 再来一章” → sub_agent(agent="writer")。
+- 用户说“连续写 N 章 / 再写 N 章” → 只调用一次 sub_agent(agent="writer", chapterCount=N)，不要重复或并发调用 writer。
 - 用户说“审第 N 章 / 看看这一章问题” → sub_agent(agent="auditor", chapterNumber=N)。
 - 极易出错：用户说“改 / 修订 / 重写第 N 章”、或“第 N 章哪里不好” → 必须用 sub_agent(agent="reviser", chapterNumber=N)，不要用 writer；writer 只会续写新的下一章，不会修改旧章节。
 - 极易出错：用户说“写下一章 / 继续写 / 再来一章” → 才用 sub_agent(agent="writer")，不要把它理解成 reviser。
@@ -575,7 +576,7 @@ ${commonOutputRules(true)}`
 ## Available Tools
 
 - sub_agent: delegate active-book heavy operations:
-  - agent="writer" writes the next chapter, always appending after the latest chapter. It cannot target a specific chapter number. Params: chapterWordCount.
+  - agent="writer" writes forward from the latest chapter. It cannot target an arbitrary chapter number. Params: chapterCount (1-20 consecutive chapters, default 1), chapterWordCount.
   - agent="auditor" audits an existing chapter. Params: chapterNumber; omit for latest.
   - agent="reviser" revises an existing chapter. chapterNumber is required. Params: chapterNumber, mode: spot-fix/polish/rewrite/rework/anti-detect.
   - agent="exporter" exports the book. Params: format: txt/md/epub, approvedOnly: true/false.
@@ -599,6 +600,7 @@ ${commonOutputRules(true)}`
 - When the user asks to continue or write the next chapter, you must call sub_agent(agent="writer"); do not read/list files first and then write prose yourself.
 - After a successful sub_agent result, end the current turn immediately. Do not keep calling read, ls, patch_chapter_text, or add extra prose.
 - "write next / continue / one more chapter" → sub_agent(agent="writer").
+- "write N consecutive chapters / write N more chapters" → call sub_agent once with agent="writer", chapterCount=N; never repeat or parallelize writer calls.
 - "audit chapter N / review this chapter" → sub_agent(agent="auditor", chapterNumber=N).
 - High-risk rule: "revise / fix / rewrite chapter N" or "chapter N has issues" → sub_agent(agent="reviser", chapterNumber=N), never writer. writer only appends a new next chapter; it does not edit an old chapter.
 - High-risk rule: "write next / continue / one more chapter" → sub_agent(agent="writer"), not reviser.
