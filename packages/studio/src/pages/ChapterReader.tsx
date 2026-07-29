@@ -46,6 +46,7 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
+  const [workspaceRevision, setWorkspaceRevision] = useState(0);
 
   const handleStartEdit = () => {
     if (!data) return;
@@ -68,6 +69,7 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
       });
       setEditing(false);
       refetch();
+      setWorkspaceRevision((revision) => revision + 1);
     } catch (e) {
       alert(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -75,7 +77,7 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
     }
   };
 
-  if (loading) return (
+  if (loading && !data) return (
     <div className="flex flex-col items-center justify-center py-32 space-y-4">
       <div className="w-8 h-8 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
       <span className="text-sm text-muted-foreground">{t("reader.openingManuscript")}</span>
@@ -195,6 +197,7 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
       </div>
 
       <ChapterWorkspacePanel
+        key={`${chapterNumber}-${workspaceRevision}`}
         bookId={bookId}
         chapterNumber={chapterNumber}
         t={t}

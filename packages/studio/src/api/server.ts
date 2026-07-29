@@ -3305,6 +3305,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
           bookId: id,
           chapterNumber: num,
           fullText,
+          versionSource: "restore",
         },
       );
       broadcast("chapter:restored", { bookId: id, chapterNumber: num });
@@ -3351,6 +3352,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
           bookId: id,
           chapterNumber: num,
           fullText: content,
+          versionSource: "manual",
         },
       );
       return c.json({ ok: true, chapterNumber: num, result });
@@ -3699,30 +3701,52 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
   app.get("/api/v1/services", async (c) => {
     const secrets = await loadSecrets(root);
     const endpoints = getAllEndpoints().filter((ep) => ep.id !== "custom");
-
-    // Fast: only check connection status from secrets, no external API calls.
-    const services = endpoints.map((ep) => ({
-      service: ep.id,
-      label: ep.label,
-      group: ep.group,
-      connected: Boolean(secrets.services[ep.id]?.apiKey),
-    })).sort(compareServiceListItems);
-
-    // Add custom services from inkos.json
+    let configuredServices: ReturnType<typeof normalizeServiceConfig> = [];
     try {
       const config = await loadRawConfig(root);
-      for (const svc of normalizeServiceConfig((config.llm as Record<string, unknown> | undefined)?.services)) {
-        if (svc.service === "custom") {
-          const secretKey = `custom:${svc.name}`;
-          services.push({
-            service: secretKey,
-            label: svc.name ?? "Custom",
-            group: undefined,
-            connected: Boolean(secrets.services[secretKey]?.apiKey),
-          });
-        }
-      }
+      configuredServices = normalizeServiceConfig(
+        (config.llm as Record<string, unknown> | undefined)?.services,
+      );
     } catch { /* no config file */ }
+    const configuredBankServices = new Set(
+      configuredServices
+        .filter((service) => service.service !== "custom")
+        .map((service) => service.service),
+    );
+
+    // Fast: only check connection status from secrets, no external API calls.
+    const services = endpoints.map((ep) => {
+      const apiKeyOptional = isApiKeyOptionalForEndpoint({
+        provider: resolveServiceProviderFamily(ep.id) ?? "openai",
+        baseUrl: resolveServicePreset(ep.id)?.baseUrl ?? ep.baseUrl,
+      });
+      return {
+        service: ep.id,
+        label: ep.label,
+        group: ep.group,
+        apiKeyOptional,
+        connected: Boolean(secrets.services[ep.id]?.apiKey)
+          || (apiKeyOptional && configuredBankServices.has(ep.id)),
+      };
+    }).sort(compareServiceListItems);
+
+    // Add custom services from inkos.json
+    for (const svc of configuredServices) {
+      if (svc.service === "custom") {
+        const secretKey = `custom:${svc.name}`;
+        const apiKeyOptional = isApiKeyOptionalForEndpoint({
+          provider: "openai",
+          baseUrl: svc.baseUrl,
+        });
+        services.push({
+          service: secretKey,
+          label: svc.name ?? "Custom",
+          group: undefined,
+          apiKeyOptional,
+          connected: Boolean(secrets.services[secretKey]?.apiKey) || apiKeyOptional,
+        });
+      }
+    }
 
     return c.json({ services });
   });

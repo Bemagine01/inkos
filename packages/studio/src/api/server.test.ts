@@ -1045,6 +1045,7 @@ describe("createStudioServer daemon lifecycle", () => {
       llm: {
         services: [
           { service: "custom", name: "内网GPT", baseUrl: "https://llm.internal.corp/v1" },
+          { service: "lmstudio", temperature: 0.7, apiFormat: "chat", stream: true },
         ],
       },
     }, null, 2), "utf-8");
@@ -1071,6 +1072,10 @@ describe("createStudioServer daemon lifecycle", () => {
     expect(bank.filter((s) => s.group === "codingPlan")).toHaveLength(8);
     expect(bank.filter((s) => s.group === "aggregator").map((s) => s.service)[0]).toBe("kkaiapi");
     expect(body.services.find((s) => s.service === "moonshot")?.connected).toBe(true);
+    expect(body.services.find((s) => s.service === "lmstudio")).toMatchObject({
+      connected: true,
+      apiKeyOptional: true,
+    });
     expect(body.services.find((s) => s.service === "custom:内网GPT")).toMatchObject({
       connected: true,
     });
@@ -2781,6 +2786,7 @@ describe("createStudioServer daemon lifecycle", () => {
       join(root, "books", "demo-book", "chapters", ".versions", "0003"),
     );
     expect(versionFiles).toHaveLength(1);
+    expect(versionFiles[0]).toContain("_manual_");
     await expect(readFile(
       join(root, "books", "demo-book", "chapters", ".versions", "0003", versionFiles[0]!),
       "utf-8",
