@@ -115,7 +115,7 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
   const paragraphs = body.split(/\n\n+/).filter(Boolean);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-10 fade-in">
+    <div className="w-full space-y-10 fade-in">
       {/* Navigation & Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <nav className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
