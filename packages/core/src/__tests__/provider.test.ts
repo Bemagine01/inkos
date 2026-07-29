@@ -654,6 +654,38 @@ describe("chatCompletion via pi-ai", () => {
     vi.unstubAllGlobals();
   });
 
+  it("uses native fetch transport for local LM Studio without an API key", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "本地 LM Studio 可用" } }],
+        usage: { prompt_tokens: 3, completion_tokens: 4, total_tokens: 7 },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = makeClient(0.7, {
+      service: "lmstudio",
+      configSource: "studio",
+      stream: false,
+      _apiKey: "",
+      _piModel: {
+        ...MOCK_PI_MODEL,
+        provider: "openai",
+        baseUrl: "http://127.0.0.1:1234/v1",
+      },
+    });
+    const result = await chatCompletion(client, "openai/gpt-oss-20b", [
+      { role: "user", content: "ping" },
+    ]);
+
+    expect(result.content).toBe("本地 LM Studio 可用");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(mockCompleteSimple).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
+  });
+
   it("uses native fetch transport for local custom OpenAI-compatible endpoints without an API key", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

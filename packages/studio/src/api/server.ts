@@ -2667,7 +2667,7 @@ async function probeServiceCapabilities(args: {
     endpoint?.checkModel
     ?? preset?.knownModels?.[0]
     ?? endpoint?.models.find((model) => model.enabled !== false)?.id;
-  const useDynamicLocalModels = baseService === "ollama";
+  const useDynamicLocalModels = baseService === "ollama" || baseService === "lmstudio";
   const useEndpointCheckModel = !useDynamicLocalModels
     && !isCustomServiceId(args.service)
     && discoveredModels.length === 0
