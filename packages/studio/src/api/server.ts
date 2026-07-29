@@ -93,6 +93,13 @@ import {
   createConnectChoiceTool,
   createRemoveNodeTool,
   createLLMTranslationModel,
+  deleteLatestChapter,
+  executeEditTransaction,
+  listChapterVersions,
+  readChapterPlanDocument,
+  readChapterUserBrief,
+  readChapterVersion,
+  saveChapterUserBrief,
   createTranslationProjectFromFile,
   loadTranslationChapter,
   loadTranslationManifest,
@@ -2928,7 +2935,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
   }
 
   async function buildPipelineConfig(
-    overrides?: Partial<Pick<PipelineConfig, "externalContext" | "client" | "model">> & {
+    overrides?: Partial<Pick<PipelineConfig, "externalContext" | "client" | "model" | "revisionGate">> & {
       readonly currentConfig?: ProjectConfig;
       readonly sessionIdForSSE?: string;
       // 确认式生产任务的 execution id。给任务构建 pipeline 时传入，该 pipeline
@@ -2969,7 +2976,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
       foundationReviewRetries: currentConfig.foundation?.reviewRetries ?? 2,
       writingReviewRetries: currentConfig.writing?.reviewRetries ?? 1,
       chapterReviewMode,
-      revisionGate,
+      revisionGate: overrides?.revisionGate ?? revisionGate,
       modelOverrides: currentConfig.modelOverrides,
       notifyChannels: currentConfig.notify,
       logger,
@@ -3144,26 +3151,207 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
     }
   });
 
+  app.get("/api/v1/books/:id/chapters/:num/workspace", async (c) => {
+    const id = c.req.param("id");
+    const num = parseInt(c.req.param("num"), 10);
+    if (!Number.isInteger(num) || num < 1) {
+      return c.json({ error: "Invalid chapter number" }, 400);
+    }
+    try {
+      const bookDir = state.bookDir(id);
+      const [brief, plan, versions, index] = await Promise.all([
+        readChapterUserBrief(bookDir, num),
+        readChapterPlanDocument(bookDir, num),
+        listChapterVersions(bookDir, num),
+        state.loadChapterIndex(id),
+      ]);
+      const latestChapter = index.reduce((latest, chapter) => Math.max(latest, chapter.number), 0);
+      return c.json({
+        chapterNumber: num,
+        brief,
+        plan,
+        versions,
+        canDelete: num === latestChapter,
+      });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  });
+
+  app.put("/api/v1/books/:id/chapters/:num/workspace/brief", async (c) => {
+    const id = c.req.param("id");
+    const num = parseInt(c.req.param("num"), 10);
+    const body: { brief?: unknown } = await c.req.json<{ brief?: unknown }>().catch(() => ({}));
+    if (!Number.isInteger(num) || num < 1 || typeof body.brief !== "string") {
+      return c.json({ error: "A valid chapter number and brief string are required" }, 400);
+    }
+    try {
+      await saveChapterUserBrief(state.bookDir(id), num, body.brief);
+      return c.json({ ok: true, chapterNumber: num, brief: body.brief.trim() });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  });
+
+  app.post("/api/v1/books/:id/chapters/:num/workspace/inspiration", async (c) => {
+    const id = c.req.param("id");
+    const num = parseInt(c.req.param("num"), 10);
+    const body: { brief?: unknown } = await c.req.json<{ brief?: unknown }>().catch(() => ({}));
+    if (!Number.isInteger(num) || num < 1 || (body.brief !== undefined && typeof body.brief !== "string")) {
+      return c.json({ error: "A valid chapter number and optional brief string are required" }, 400);
+    }
+    try {
+      const bookDir = state.bookDir(id);
+      const chaptersDir = join(bookDir, "chapters");
+      const files = await readdir(chaptersDir);
+      const paddedNum = String(num).padStart(4, "0");
+      const chapterFile = files.find((file) => file.startsWith(paddedNum) && file.endsWith(".md"));
+      if (!chapterFile) {
+        return c.json({ error: "Chapter not found" }, 404);
+      }
+      const [chapter, persistedBrief, plan, book, pipelineConfig] = await Promise.all([
+        readFile(join(chaptersDir, chapterFile), "utf-8"),
+        readChapterUserBrief(bookDir, num),
+        readChapterPlanDocument(bookDir, num),
+        state.loadBookConfig(id),
+        buildPipelineConfig({ bookIdForSettings: id }),
+      ]);
+      const language = book.language === "en" ? "en" : "zh";
+      const requestedBrief = typeof body.brief === "string" ? body.brief.trim() : "";
+      const response = await chatCompletion(
+        pipelineConfig.client,
+        pipelineConfig.model,
+        [
+          {
+            role: "system",
+            content: language === "en"
+              ? [
+                  "You are a fiction editor generating one optional inspiration card for a chapter rewrite.",
+                  "Offer a concrete alternative beat, evidence/action detail, and ending turn that fit the supplied canon.",
+                  "Do not rewrite the chapter, modify canon, or claim any file was changed.",
+                  "Return only a short, readable Markdown card.",
+                ].join("\n")
+              : [
+                  "你是小说编辑，只为本章重写生成一张可选的灵感卡。",
+                  "给出一个符合现有设定的具体替代场面、证据或行动细节，以及章尾转折。",
+                  "不要代写整章，不要改写既成事实，也不要声称已经修改文件。",
+                  "只返回简短、可读的 Markdown 灵感卡。",
+                ].join("\n"),
+          },
+          {
+            role: "user",
+            content: [
+              language === "en" ? `Book: ${book.title}` : `书名：${book.title}`,
+              language === "en" ? `Chapter: ${num}` : `章节：第${num}章`,
+              requestedBrief || persistedBrief
+                ? `${language === "en" ? "Current user brief" : "当前用户提示"}:\n${requestedBrief || persistedBrief}`
+                : "",
+              plan ? `${language === "en" ? "Generated chapter plan" : "系统章节计划"}:\n${plan}` : "",
+              `${language === "en" ? "Current chapter" : "当前章节"}:\n${chapter}`,
+            ].filter(Boolean).join("\n\n"),
+          },
+        ],
+        { temperature: 0.9, maxTokens: 600 },
+      );
+      const card = response.content.trim();
+      if (!card) {
+        throw new Error("The model returned an empty inspiration card");
+      }
+      return c.json({ chapterNumber: num, card });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  });
+
+  app.get("/api/v1/books/:id/chapters/:num/versions/:versionId", async (c) => {
+    const id = c.req.param("id");
+    const num = parseInt(c.req.param("num"), 10);
+    try {
+      const content = await readChapterVersion(
+        state.bookDir(id),
+        num,
+        c.req.param("versionId"),
+      );
+      return c.json({ chapterNumber: num, versionId: c.req.param("versionId"), content });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 404);
+    }
+  });
+
+  app.post("/api/v1/books/:id/chapters/:num/versions/:versionId/restore", async (c) => {
+    const id = c.req.param("id");
+    const num = parseInt(c.req.param("num"), 10);
+    const releaseLock = await state.acquireBookLock(id);
+    try {
+      const fullText = await readChapterVersion(
+        state.bookDir(id),
+        num,
+        c.req.param("versionId"),
+      );
+      const result = await executeEditTransaction(
+        {
+          bookDir: (bookId) => state.bookDir(bookId),
+          loadChapterIndex: (bookId) => state.loadChapterIndex(bookId),
+          saveChapterIndex: (bookId, index) => state.saveChapterIndex(bookId, index),
+        },
+        {
+          kind: "chapter-replace",
+          bookId: id,
+          chapterNumber: num,
+          fullText,
+        },
+      );
+      broadcast("chapter:restored", { bookId: id, chapterNumber: num });
+      return c.json({ ok: true, chapterNumber: num, versionId: c.req.param("versionId"), result });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    } finally {
+      await releaseLock();
+    }
+  });
+
+  app.delete("/api/v1/books/:id/chapters/:num", async (c) => {
+    const id = c.req.param("id");
+    const num = parseInt(c.req.param("num"), 10);
+    const releaseLock = await state.acquireBookLock(id);
+    try {
+      const result = await deleteLatestChapter(state, id, { chapterNumber: num });
+      broadcast("chapter:deleted", { bookId: id, chapterNumber: result.deletedChapter });
+      return c.json({ ok: true, ...result });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+    } finally {
+      await releaseLock();
+    }
+  });
+
   // --- Chapter Save ---
 
   app.put("/api/v1/books/:id/chapters/:num", async (c) => {
     const id = c.req.param("id");
     const num = parseInt(c.req.param("num"), 10);
-    const bookDir = state.bookDir(id);
-    const chaptersDir = join(bookDir, "chapters");
     const { content } = await c.req.json<{ content: string }>();
 
+    const releaseLock = await state.acquireBookLock(id);
     try {
-      const files = await readdir(chaptersDir);
-      const paddedNum = String(num).padStart(4, "0");
-      const match = files.find((f) => f.startsWith(paddedNum) && f.endsWith(".md"));
-      if (!match) return c.json({ error: "Chapter not found" }, 404);
-
-      const { writeFile: writeFileFs } = await import("node:fs/promises");
-      await writeFileFs(join(chaptersDir, match), content, "utf-8");
-      return c.json({ ok: true, chapterNumber: num });
+      const result = await executeEditTransaction(
+        {
+          bookDir: (bookId) => state.bookDir(bookId),
+          loadChapterIndex: (bookId) => state.loadChapterIndex(bookId),
+          saveChapterIndex: (bookId, index) => state.saveChapterIndex(bookId, index),
+        },
+        {
+          kind: "chapter-replace",
+          bookId: id,
+          chapterNumber: num,
+          fullText: content,
+        },
+      );
+      return c.json({ ok: true, chapterNumber: num, result });
     } catch (e) {
       return c.json({ error: String(e) }, 500);
+    } finally {
+      await releaseLock();
     }
   });
 
@@ -5754,16 +5942,22 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
 
     broadcast("rewrite:start", { bookId: id, chapter: chapterNum });
     try {
-      const rollbackTarget = chapterNum - 1;
-      const discarded = await state.rollbackToChapter(id, rollbackTarget);
+      if (Object.prototype.hasOwnProperty.call(body, "brief")) {
+        await saveChapterUserBrief(state.bookDir(id), chapterNum, body.brief ?? "");
+      }
       const pipeline = new PipelineRunner(await buildPipelineConfig({
         externalContext: body.brief,
+        revisionGate: "always",
+        bookIdForSettings: id,
       }));
-      pipeline.writeNextChapter(id).then(
-        (result) => broadcast("rewrite:complete", { bookId: id, chapterNumber: result.chapterNumber, title: result.title, wordCount: result.wordCount }),
-        (e) => broadcast("rewrite:error", { bookId: id, error: e instanceof Error ? e.message : String(e) }),
-      );
-      return c.json({ status: "rewriting", bookId: id, chapter: chapterNum, rolledBackTo: rollbackTarget, discarded });
+      const result = await pipeline.reviseDraft(id, chapterNum, "rework");
+      broadcast("rewrite:complete", {
+        bookId: id,
+        chapterNumber: result.chapterNumber,
+        wordCount: result.wordCount,
+        status: result.status,
+      });
+      return c.json({ status: "complete", bookId: id, chapter: chapterNum, result });
     } catch (e) {
       broadcast("rewrite:error", { bookId: id, error: String(e) });
       return c.json({ error: String(e) }, 500);

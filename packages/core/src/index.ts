@@ -545,6 +545,16 @@ export { ScriptCreationAgent, StoryboardCreationAgent, InteractiveFilmCreationAg
 export { BookWriteLockError, StateManager } from "./state/manager.js";
 export { syncChapterWordCounts, type ChapterWordCountChange, type ChapterWordSyncDeps, type ChapterWordSyncResult } from "./state/chapter-word-sync.js";
 export { deleteLatestChapter, type ChapterDeleteDeps, type DeleteLatestChapterOptions, type DeleteLatestChapterResult } from "./state/chapter-delete.js";
+export {
+  archiveChapterVersion,
+  listChapterVersions,
+  readChapterPlanDocument,
+  readChapterUserBrief,
+  readChapterVersion,
+  saveChapterUserBrief,
+  type ChapterVersion,
+  type ChapterVersionSource,
+} from "./state/chapter-workspace.js";
 export { bootstrapStructuredStateFromMarkdown } from "./state/state-bootstrap.js";
 export { renderCurrentStateProjection, renderHooksProjection, renderChapterSummariesProjection } from "./state/state-projections.js";
 export { applyRuntimeStateDelta, type RuntimeStateSnapshot } from "./state/state-reducer.js";

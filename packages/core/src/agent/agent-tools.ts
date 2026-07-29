@@ -8,6 +8,7 @@ import { inferLanguage } from "../utils/language.js";
 import { mkdir, readFile, writeFile, readdir, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { StateManager } from "../state/manager.js";
+import { deleteLatestChapter } from "../state/chapter-delete.js";
 import { assertSafeTruthFileName, createInteractionToolsFromDeps } from "../interaction/project-tools.js";
 import { writeExportArtifact } from "../interaction/export-artifact.js";
 import { assertSafeBookId, deriveBookIdFromTitle } from "../utils/book-id.js";
@@ -2650,6 +2651,46 @@ const PatchChapterTextParams = Type.Object({
   targetText: Type.String({ description: "Exact text to replace." }),
   replacementText: Type.String({ description: "Replacement text." }),
 });
+
+const DeleteLatestChapterParams = Type.Object({
+  bookId: Type.Optional(Type.String({ description: "Book ID. Omit to use the active book." })),
+  chapterNumber: Type.Optional(Type.Number({
+    description: "Latest chapter number expected by the user. The tool rejects middle-chapter deletion.",
+  })),
+});
+
+export function createDeleteLatestChapterTool(
+  projectRoot: string,
+  activeBookId: string | null,
+): AgentTool<typeof DeleteLatestChapterParams> {
+  return {
+    name: "delete_latest_chapter",
+    description:
+      "Safely delete only the latest chapter, preserve its manuscript under chapters/.trash, " +
+      "and roll story state back to the previous chapter snapshot. Never deletes a middle chapter.",
+    label: "Delete Latest Chapter",
+    parameters: DeleteLatestChapterParams,
+    async execute(_toolCallId, params): Promise<AgentToolResult<unknown>> {
+      const bookId = resolveToolBookId("delete_latest_chapter", params.bookId, activeBookId);
+      const state = new StateManager(projectRoot);
+      const releaseLock = await state.acquireBookLock(bookId);
+      try {
+        const result = await deleteLatestChapter(state, bookId, {
+          chapterNumber: params.chapterNumber,
+        });
+        return textResult(
+          `Deleted latest chapter ${result.deletedChapter} from "${bookId}", preserved it in trash, and rolled story state back to chapter ${result.rolledBackTo}.`,
+          {
+            kind: "chapter_deleted",
+            ...result,
+          },
+        );
+      } finally {
+        await releaseLock();
+      }
+    },
+  };
+}
 
 export function createPatchChapterTextTool(
   pipeline: PipelineRunner,

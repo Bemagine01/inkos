@@ -467,6 +467,8 @@ ${bookId ? `当前书籍：${name}` : "当前没有绑定书籍；如果用户�
 - 角色卡也是可编辑设定文件：主要角色用 roles/主要角色/<角色名>.md 或 roles/major/<name>.md；次要角色用 roles/次要角色/<角色名>.md 或 roles/minor/<name>.md。用户要求改角色性格、动机、关系、禁忌或当前状态时，先定位对应角色卡，再用 write_truth_file 覆盖整张卡。
 - rename_entity：统一修改当前书角色或实体名。
 - patch_chapter_text：对当前书某章做局部定点修补。
+- replace_chapter_text：用用户提供的完整新稿替换某章。
+- delete_latest_chapter：仅在用户明确要求时安全删除最后一章；不支持删除中间章。
 - grep：搜索当前书内容。
 - ls：列文件或章节。
 
@@ -488,6 +490,8 @@ ${bookId ? `Active book: ${name}` : "No book is bound; ask for the file or proje
 - Character cards are editable truth files too: major characters use roles/major/<name>.md (or roles/主要角色/<name>.md); minor characters use roles/minor/<name>.md (or roles/次要角色/<name>.md). When the user asks to change a character's personality, motive, relationship, taboo, or current state, locate that role card first, then replace the whole card with write_truth_file.
 - rename_entity: rename active-book characters or entities.
 - patch_chapter_text: apply a local chapter patch.
+- replace_chapter_text: replace a chapter with complete text supplied by the user.
+- delete_latest_chapter: safely delete the latest chapter only when explicitly requested; middle chapters cannot be deleted.
 - grep: search active-book content.
 - ls: list files or chapters.
 
@@ -526,6 +530,7 @@ function buildBookPrompt(bookId: string, isZh: boolean): string {
 - rename_entity：统一改角色/实体名。
 - patch_chapter_text：对已有章节做局部定点修补。
 - replace_chapter_text：用户已经给出某章完整替换正文时，整章覆盖并标记复核；不要用它让模型自己生成新正文，模型生成型重写仍走 reviser。
+- delete_latest_chapter：仅当用户明确要求删除当前最后一章时调用；它会保留回收站副本并回滚故事状态。不得用于删除中间章节。
 - research_web：用户明确要求联网研究、事实核查、年代/职业/地域/制度资料时使用；报告保存为参考材料，不会自动改当前书设定或正文。
 - ingest_material：用户给 URL、上传 PDF/Markdown/文本资料，或要求“先读/归档这份资料”时使用；资料卡保存在 .inkos/materials，不会自动改当前书设定或正文。
 - retrieve_material：基于当前任务从 .inkos/materials 召回相关片段；返回带路径和字符范围的证据指针。它只读取参考资料，不改设定或正文。
@@ -587,6 +592,7 @@ ${commonOutputRules(true)}`
 - rename_entity: rename characters or entities.
 - patch_chapter_text: apply a local chapter patch.
 - replace_chapter_text: replace a whole chapter only when the user provides the complete replacement chapter text; mark it for review. Do not use it for model-generated rewrites — use reviser.
+- delete_latest_chapter: use only when the user explicitly asks to delete the current latest chapter. It preserves a trash copy and rolls story state back; it cannot delete a middle chapter.
 - research_web: collect web research or fact checks for era/profession/region/institution details. Reports are saved as reference material and do not automatically change canon or prose.
 - ingest_material: archive a user-provided URL, uploaded PDF, Markdown, or text file into .inkos/materials. Material cards are references only and do not automatically change canon or prose.
 - retrieve_material: retrieve task-relevant snippets from .inkos/materials with path and character-range evidence pointers. It reads reference materials only and does not change canon or prose.

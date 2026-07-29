@@ -3,6 +3,7 @@ import { fetchJson, useApi, postApi } from "../hooks/use-api";
 import type { Theme } from "../hooks/use-theme";
 import type { TFunction } from "../hooks/use-i18n";
 import { useColors } from "../hooks/use-colors";
+import { ChapterWorkspacePanel } from "../components/ChapterWorkspacePanel";
 import {
   ChevronLeft,
   Check,
@@ -192,6 +193,14 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
           </button>
         </div>
       </div>
+
+      <ChapterWorkspacePanel
+        bookId={bookId}
+        chapterNumber={chapterNumber}
+        t={t}
+        onChapterChanged={refetch}
+        onChapterDeleted={() => nav.toBook(bookId)}
+      />
 
       {/* Manuscript Sheet */}
       <div className="paper-sheet rounded-2xl p-8 md:p-16 lg:p-24 shadow-2xl shadow-primary/5 min-h-[80vh] relative overflow-hidden">

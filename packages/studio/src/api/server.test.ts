@@ -20,6 +20,7 @@ const resyncChapterArtifactsMock = vi.fn();
 const writeNextChapterMock = vi.fn();
 const writeChaptersMock = vi.fn();
 const rollbackToChapterMock = vi.fn();
+const deleteLatestChapterMock = vi.fn();
 const saveChapterIndexMock = vi.fn();
 const loadChapterIndexMock = vi.fn();
 const loadBookConfigMock = vi.fn();
@@ -181,6 +182,10 @@ vi.mock("@actalk/inkos-core", async (importOriginal) => {
       return (await rollbackToChapterMock(bookId, chapterNumber)) as number[];
     }
 
+    async acquireBookLock(): Promise<() => Promise<void>> {
+      return async () => undefined;
+    }
+
     async getNextChapterNumber(_bookId?: string): Promise<number> {
       return 1;
     }
@@ -271,6 +276,13 @@ vi.mock("@actalk/inkos-core", async (importOriginal) => {
     loadProjectConfig: loadProjectConfigMock,
     processProjectInteractionRequest: processProjectInteractionRequestMock,
     createInteractionToolsFromDeps: createInteractionToolsFromDepsMock,
+    deleteLatestChapter: deleteLatestChapterMock,
+    executeEditTransaction: actual.executeEditTransaction,
+    listChapterVersions: actual.listChapterVersions,
+    readChapterPlanDocument: actual.readChapterPlanDocument,
+    readChapterUserBrief: actual.readChapterUserBrief,
+    readChapterVersion: actual.readChapterVersion,
+    saveChapterUserBrief: actual.saveChapterUserBrief,
     loadProjectSession: loadProjectSessionMock,
     resolveSessionActiveBook: resolveSessionActiveBookMock,
     runAgentSession: runAgentSessionMock,
@@ -416,6 +428,7 @@ describe("createStudioServer daemon lifecycle", () => {
     writeNextChapterMock.mockReset();
     writeChaptersMock.mockReset();
     rollbackToChapterMock.mockReset();
+    deleteLatestChapterMock.mockReset();
     saveChapterIndexMock.mockReset();
     loadChapterIndexMock.mockReset();
     loadBookConfigMock.mockReset();
@@ -569,6 +582,14 @@ describe("createStudioServer daemon lifecycle", () => {
     });
     saveChapterIndexMock.mockResolvedValue(undefined);
     rollbackToChapterMock.mockResolvedValue([]);
+    deleteLatestChapterMock.mockResolvedValue({
+      bookId: "demo-book",
+      deletedChapter: 3,
+      title: "Demo",
+      trashedFiles: ["chapters/.trash/0003_Demo.md"],
+      rolledBackTo: 2,
+      discarded: [3],
+    });
     pipelineConfigs.length = 0;
     pipelineAbortSignals.length = 0;
     runAgentSessionMock.mockReset();
@@ -2611,6 +2632,204 @@ describe("createStudioServer daemon lifecycle", () => {
     expect(response.status).toBe(200);
     expect(pipelineConfigs.at(-1)).toMatchObject({ externalContext: "把注意力拉回师债主线。" });
     expect(reviseDraftMock).toHaveBeenCalledWith("demo-book", 3, "rewrite");
+  });
+
+  it("exposes editable chapter briefs, generated plans, and archived versions", async () => {
+    const bookDir = join(root, "books", "demo-book");
+    const runtimeDir = join(bookDir, "story", "runtime");
+    const versionsDir = join(bookDir, "chapters", ".versions", "0003");
+    const versionId = "1782864000000_manual_11111111-1111-4111-8111-111111111111";
+    await mkdir(runtimeDir, { recursive: true });
+    await mkdir(versionsDir, { recursive: true });
+    await writeFile(join(runtimeDir, "chapter-0003.user-brief.md"), "保留证人的原话。\n", "utf-8");
+    await writeFile(join(runtimeDir, "chapter-0003.plan.md"), "# Chapter 3 Plan\n\nFind the ledger.", "utf-8");
+    await writeFile(join(versionsDir, `${versionId}.md`), "# 第3章 旧稿\n\n旧正文。", "utf-8");
+    loadChapterIndexMock.mockResolvedValue([{
+      number: 3,
+      title: "Demo",
+      status: "ready-for-review",
+      wordCount: 4,
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+      auditIssues: [],
+      lengthWarnings: [],
+    }]);
+
+    const { createStudioServer } = await import("./server.js");
+    const app = createStudioServer(cloneProjectConfig() as never, root);
+
+    const response = await app.request("http://localhost/api/v1/books/demo-book/chapters/3/workspace");
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      chapterNumber: 3,
+      brief: "保留证人的原话。",
+      plan: expect.stringContaining("Find the ledger"),
+      canDelete: true,
+      versions: [expect.objectContaining({
+        id: versionId,
+        source: "manual",
+      })],
+    });
+
+    const versionResponse = await app.request(
+      `http://localhost/api/v1/books/demo-book/chapters/3/versions/${versionId}`,
+    );
+    await expect(versionResponse.json()).resolves.toMatchObject({
+      content: expect.stringContaining("旧正文"),
+    });
+  });
+
+  it("persists chapter briefs and archives manual chapter saves", async () => {
+    loadChapterIndexMock.mockResolvedValue([{
+      number: 3,
+      title: "Demo",
+      status: "ready-for-review",
+      wordCount: 4,
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+      auditIssues: [],
+      lengthWarnings: [],
+    }]);
+    const { createStudioServer } = await import("./server.js");
+    const app = createStudioServer(cloneProjectConfig() as never, root);
+
+    const briefResponse = await app.request(
+      "http://localhost/api/v1/books/demo-book/chapters/3/workspace/brief",
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brief: "让证人先撒谎，再被账页击穿。" }),
+      },
+    );
+    expect(briefResponse.status).toBe(200);
+    await expect(readFile(
+      join(root, "books", "demo-book", "story", "runtime", "chapter-0003.user-brief.md"),
+      "utf-8",
+    )).resolves.toContain("让证人先撒谎");
+
+    const saveResponse = await app.request(
+      "http://localhost/api/v1/books/demo-book/chapters/3",
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "# 第3章 新稿\n\n人工修改后的正文。" }),
+      },
+    );
+    expect(saveResponse.status).toBe(200);
+    await expect(readFile(
+      join(root, "books", "demo-book", "chapters", "0003_Demo.md"),
+      "utf-8",
+    )).resolves.toContain("人工修改后的正文");
+    const versionFiles = await (await import("node:fs/promises")).readdir(
+      join(root, "books", "demo-book", "chapters", ".versions", "0003"),
+    );
+    expect(versionFiles).toHaveLength(1);
+    await expect(readFile(
+      join(root, "books", "demo-book", "chapters", ".versions", "0003", versionFiles[0]!),
+      "utf-8",
+    )).resolves.toContain("Body");
+  });
+
+  it("generates a non-mutating chapter inspiration card from the current manuscript", async () => {
+    chatCompletionMock.mockResolvedValueOnce({
+      content: "## 灵感卡\n\n让证人先交出一页伪账，再由水印暴露替换时间。",
+      usage: { inputTokens: 100, outputTokens: 30 },
+    });
+    const chapterPath = join(root, "books", "demo-book", "chapters", "0003_Demo.md");
+    const before = await readFile(chapterPath, "utf-8");
+    const { createStudioServer } = await import("./server.js");
+    const app = createStudioServer(cloneProjectConfig() as never, root);
+
+    const response = await app.request(
+      "http://localhost/api/v1/books/demo-book/chapters/3/workspace/inspiration",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brief: "不要增加新角色。" }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      chapterNumber: 3,
+      card: expect.stringContaining("水印"),
+    });
+    expect(chatCompletionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "user",
+          content: expect.stringContaining("不要增加新角色"),
+        }),
+      ]),
+      expect.objectContaining({ temperature: 0.9 }),
+    );
+    await expect(readFile(chapterPath, "utf-8")).resolves.toBe(before);
+  });
+
+  it("regenerates a chapter in place without rolling back downstream chapters", async () => {
+    const { createStudioServer } = await import("./server.js");
+    const app = createStudioServer(cloneProjectConfig() as never, root);
+
+    const response = await app.request("http://localhost/api/v1/books/demo-book/rewrite/3", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ brief: "保留事实，重做冲突顺序。" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(reviseDraftMock).toHaveBeenCalledWith("demo-book", 3, "rework");
+    expect(rollbackToChapterMock).not.toHaveBeenCalled();
+    expect(writeNextChapterMock).not.toHaveBeenCalled();
+    expect(pipelineConfigs.at(-1)).toMatchObject({
+      externalContext: "保留事实，重做冲突顺序。",
+      revisionGate: "always",
+    });
+    await expect(readFile(
+      join(root, "books", "demo-book", "story", "runtime", "chapter-0003.user-brief.md"),
+      "utf-8",
+    )).resolves.toContain("保留事实");
+  });
+
+  it("restores an archived chapter version and exposes safe latest-chapter deletion", async () => {
+    const bookDir = join(root, "books", "demo-book");
+    const versionsDir = join(bookDir, "chapters", ".versions", "0003");
+    const versionId = "1782864000000_revision_11111111-1111-4111-8111-111111111111";
+    await mkdir(versionsDir, { recursive: true });
+    await writeFile(join(versionsDir, `${versionId}.md`), "# 第3章 旧稿\n\n恢复后的正文。", "utf-8");
+    loadChapterIndexMock.mockResolvedValue([{
+      number: 3,
+      title: "Demo",
+      status: "ready-for-review",
+      wordCount: 4,
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+      auditIssues: [],
+      lengthWarnings: [],
+    }]);
+
+    const { createStudioServer } = await import("./server.js");
+    const app = createStudioServer(cloneProjectConfig() as never, root);
+
+    const restoreResponse = await app.request(
+      `http://localhost/api/v1/books/demo-book/chapters/3/versions/${versionId}/restore`,
+      { method: "POST" },
+    );
+    expect(restoreResponse.status).toBe(200);
+    await expect(readFile(join(bookDir, "chapters", "0003_Demo.md"), "utf-8"))
+      .resolves.toContain("恢复后的正文");
+
+    const deleteResponse = await app.request(
+      "http://localhost/api/v1/books/demo-book/chapters/3",
+      { method: "DELETE" },
+    );
+    expect(deleteResponse.status).toBe(200);
+    expect(deleteLatestChapterMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "demo-book",
+      { chapterNumber: 3 },
+    );
   });
 
   it("exposes a resync endpoint for rebuilding latest chapter truth artifacts", async () => {
