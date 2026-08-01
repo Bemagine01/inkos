@@ -1596,6 +1596,7 @@ async function executeConfirmedProductionAction(args: {
   readonly playMode?: PlayMode;
   readonly language?: StudioLanguage;
   readonly taskId: string;
+  readonly sourceRequestId?: string;
   readonly signal: AbortSignal;
   readonly onTaskChange: (exec: CollectedToolExec) => Promise<void>;
 }): Promise<CollectedToolExec> {
@@ -1817,6 +1818,7 @@ async function executeConfirmedProductionAction(args: {
     args: params,
     stages: exec.stages?.map(stage => stage.label),
     background: true,
+    ...(args.sourceRequestId ? { sourceRequestId: args.sourceRequestId } : {}),
   });
 
   try {
@@ -2808,11 +2810,13 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
     sessionId: string,
     requestedIntent: RequestedIntent,
     exec: CollectedToolExec,
+    sourceRequestId?: string,
   ): Promise<void> => {
     if (deletedSessionIds.has(sessionId)) return;
     const snapshot: StudioTaskSnapshot = {
       version: 1,
       sessionId,
+      ...(sourceRequestId ? { sourceRequestId } : {}),
       requestedIntent,
       updatedAt: Date.now(),
       execution: {
@@ -4803,6 +4807,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
       instruction,
       activeBookId,
       sessionId: reqSessionId,
+      clientRequestId: reqClientRequestId,
       sessionKind: reqSessionKind,
       actionSource: reqActionSource,
       requestedIntent: reqRequestedIntent,
@@ -4817,6 +4822,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
       instruction: string;
       activeBookId?: string;
       sessionId?: string;
+      clientRequestId?: unknown;
       sessionKind?: string;
       actionSource?: string;
       requestedIntent?: string;
@@ -4835,6 +4841,9 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
     if (!sessionId?.trim()) {
       throw new ApiError(400, "SESSION_ID_REQUIRED", "sessionId is required");
     }
+    const sourceRequestId = typeof reqClientRequestId === "string" && reqClientRequestId.trim()
+      ? reqClientRequestId.trim().slice(0, 128)
+      : undefined;
     const language = await currentProjectLanguage();
     if (reqModel && !isTextChatModelId(reqModel)) {
       const message = nonTextModelMessage(reqModel, language);
@@ -5157,8 +5166,14 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
             actionPayload,
             language: surfaceLanguage,
             taskId,
+            sourceRequestId,
             signal: taskController.signal,
-            onTaskChange: (taskExec) => persistConfirmedTask(bookSession.sessionId, confirmedIntent, taskExec),
+            onTaskChange: (taskExec) => persistConfirmedTask(
+              bookSession.sessionId,
+              confirmedIntent,
+              taskExec,
+              sourceRequestId,
+            ),
             ...(playMode ? { playMode } : {}),
           });
 

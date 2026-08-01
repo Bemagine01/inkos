@@ -4012,6 +4012,7 @@ describe("createStudioServer daemon lifecycle", () => {
       body: JSON.stringify({
         instruction: "写一篇冷库账本短篇。",
         sessionId: "bg-flag-session",
+        clientRequestId: "client-request-1",
         sessionKind: "short",
         actionSource: "button",
         requestedIntent: "short_run",
@@ -4027,6 +4028,7 @@ describe("createStudioServer daemon lifecycle", () => {
     expect(findToolStart((data) => String(data.id ?? "").startsWith("direct-short_run-"))?.data).toMatchObject({
       sessionId: "bg-flag-session",
       background: true,
+      sourceRequestId: "client-request-1",
     });
 
     // 聊天轮工具的 tool:start 不带 background 标记，前端维持聊天轮分类。

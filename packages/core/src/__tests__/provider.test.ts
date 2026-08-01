@@ -423,6 +423,33 @@ describe("chatCompletion via pi-ai", () => {
     vi.unstubAllGlobals();
   });
 
+  it("aborts a pending kkaiapi request instead of leaving the writer blocked", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal;
+      signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = makeClient(0.7, {
+      service: "kkaiapi",
+      stream: true,
+      _piModel: {
+        ...MOCK_PI_MODEL,
+        provider: "openai",
+        baseUrl: "https://api.kkaiapi.com/v1",
+      },
+    });
+
+    const pending = chatCompletion(client, "deepseek-v4-flash", [{ role: "user", content: "write" }], {
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    controller.abort(new Error("Stopped by user"));
+
+    await expect(pending).rejects.toThrow("Stopped by user");
+    vi.unstubAllGlobals();
+  });
+
   it("does not leave a stream monitor timer after native non-stream chat", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn().mockResolvedValue({

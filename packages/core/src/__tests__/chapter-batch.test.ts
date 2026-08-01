@@ -91,6 +91,38 @@ describe("PipelineRunner.writeChapters", () => {
     expect(release).toHaveBeenCalledOnce();
   });
 
+  it("releases the book lock when an in-flight chapter is aborted", async () => {
+    const root = await mkdtemp(join(tmpdir(), "inkos-batch-"));
+    roots.push(root);
+    const runner = new PipelineRunner({
+      client: {} as never,
+      model: "test-model",
+      projectRoot: root,
+    });
+    const controller = new AbortController();
+    const release = vi.fn(async () => undefined);
+    const acquireBookLock = vi.fn(async () => release);
+    const writeLocked = vi.fn(() => new Promise<ChapterPipelineResult>((_resolve, reject) => {
+      controller.signal.addEventListener("abort", () => reject(controller.signal.reason), { once: true });
+    }));
+    const internals = runner as unknown as {
+      state: { acquireBookLock: typeof acquireBookLock };
+      _writeNextChapterLocked: typeof writeLocked;
+    };
+    internals.state = { acquireBookLock };
+    internals._writeNextChapterLocked = writeLocked;
+
+    const pending = runner.runWithAbortSignal(
+      controller.signal,
+      () => runner.writeChapters("demo-book", 5),
+    );
+    await vi.waitFor(() => expect(writeLocked).toHaveBeenCalledOnce());
+    controller.abort(new Error("Stopped by user"));
+
+    await expect(pending).rejects.toThrow("Stopped by user");
+    expect(release).toHaveBeenCalledOnce();
+  });
+
   it("rejects invalid batch sizes before taking the lock", async () => {
     const root = await mkdtemp(join(tmpdir(), "inkos-batch-"));
     roots.push(root);
